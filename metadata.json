@@ -1,0 +1,6 @@
+{
+  "name": "CannaMed",
+  "description": "Control y seguimiento de cannabis medicinal: dosis, formatos, terpenos, recetas y literatura clínica",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
