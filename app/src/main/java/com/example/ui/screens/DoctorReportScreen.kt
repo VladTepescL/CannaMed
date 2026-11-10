@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.Cartridge
 import com.example.data.model.DosageLog
 import com.example.data.model.Prescription
+import com.example.ui.components.D3DosageEvolutionChart
 import com.example.ui.theme.EmeraldPrimary
 import com.example.ui.theme.EmeraldSecondary
 import com.example.ui.theme.EmeraldSecondaryContainer
@@ -285,12 +286,18 @@ fun DoctorReportScreen(
         }
 
         // Charts (Responsive to selected time period)
-        item {
-            WeeklyIntakeChartCard(logs = periodLogs)
-        }
+        if (incReliefAndCharts) {
+            item {
+                D3DosageEvolutionChart(logs = periodLogs)
+            }
 
-        item {
-            ReliefByFormatCard(logs = periodLogs)
+            item {
+                WeeklyIntakeChartCard(logs = periodLogs)
+            }
+
+            item {
+                ReliefByFormatCard(logs = periodLogs)
+            }
         }
 
         // Patient & Doctor Name Input & Export Actions
@@ -345,7 +352,7 @@ fun DoctorReportScreen(
                     ) {
                         Button(
                             onClick = {
-                                printOrSavePdf(context, reportText, patientName)
+                                printOrSavePdf(context, reportText, patientName, periodLogs)
                             },
                             modifier = Modifier.weight(1f).testTag("print_report_button"),
                             colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
@@ -635,28 +642,134 @@ fun ReliefByFormatCard(logs: List<DosageLog>) {
     }
 }
 
-fun printOrSavePdf(context: Context, reportContent: String, patientName: String) {
+fun generateExportChartSvg(logs: List<DosageLog>): String {
+    val dayFormat = SimpleDateFormat("dd/MM", Locale.getDefault())
+    val shortDay = SimpleDateFormat("EEE", Locale.getDefault())
+
+    val points = mutableListOf<Triple<String, Double, Double>>() // Date label, grams, relief
+    for (i in 13 downTo 0) {
+        val cal = Calendar.getInstance()
+        cal.add(Calendar.DAY_OF_YEAR, -i)
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val start = cal.timeInMillis
+
+        cal.set(Calendar.HOUR_OF_DAY, 23)
+        cal.set(Calendar.MINUTE, 59)
+        cal.set(Calendar.SECOND, 59)
+        val end = cal.timeInMillis
+
+        val dayLogs = logs.filter { it.timestamp in start..end }
+        val grams = dayLogs.sumOf { it.equivalentGramsDriedFlower }
+        val avgRelief = if (dayLogs.isNotEmpty()) dayLogs.map { it.reliefScore }.average() else 0.0
+        val label = "${shortDay.format(Date(start))} ${dayFormat.format(Date(start))}"
+        points.add(Triple(label, grams, avgRelief))
+    }
+
+    val maxGrams = (points.maxOfOrNull { it.second } ?: 1.0).coerceAtLeast(1.0)
+    val width = 640
+    val height = 220
+    val padL = 40
+    val padR = 25
+    val padT = 25
+    val padB = 40
+    val chartW = width - padL - padR
+    val chartH = height - padT - padB
+
+    val barW = (chartW.toDouble() / points.size * 0.55).toInt()
+    val svgBuilder = StringBuilder()
+    svgBuilder.append("<svg width=\"100%\" height=\"220\" viewBox=\"0 0 $width $height\" xmlns=\"http://www.w3.org/2000/svg\" style=\"background:#FAFAFA; border:1px solid #E2E8F0; border-radius:8px; margin: 16px 0;\">")
+
+    // Grid lines
+    for (i in 0..4) {
+        val y = padT + (chartH * i / 4)
+        val gVal = String.format(Locale.US, "%.1f", maxGrams * (4 - i) / 4.0)
+        svgBuilder.append("<line x1=\"$padL\" y1=\"$y\" x2=\"${width - padR}\" y2=\"$y\" stroke=\"#E2E8F0\" stroke-dasharray=\"3,3\" />")
+        svgBuilder.append("<text x=\"${padL - 6}\" y=\"${y + 4}\" font-size=\"9\" fill=\"#64748B\" text-anchor=\"end\">${gVal}g</text>")
+    }
+
+    // Bars: Grams
+    val reliefPoints = mutableListOf<Pair<Int, Int>>()
+    points.forEachIndexed { idx, (label, grams, relief) ->
+        val xCenter = padL + (idx * chartW / (points.size - 1).coerceAtLeast(1))
+        val barH = (grams / maxGrams * chartH).toInt()
+        val barY = padT + chartH - barH
+
+        if (barH > 0) {
+            svgBuilder.append("<rect x=\"${xCenter - barW / 2}\" y=\"$barY\" width=\"$barW\" height=\"$barH\" fill=\"#10B981\" rx=\"3\" opacity=\"0.85\" />")
+        }
+
+        // Relief coordinate (scaled 0-10 to chartH)
+        val reliefY = padT + chartH - ((relief / 10.0) * chartH).toInt()
+        reliefPoints.add(Pair(xCenter, reliefY))
+
+        // X Axis labels (alternate or every 2)
+        if (idx % 2 == 0 || idx == points.size - 1) {
+            svgBuilder.append("<text x=\"$xCenter\" y=\"${height - 12}\" font-size=\"8.5\" fill=\"#475569\" text-anchor=\"middle\">$label</text>")
+        }
+    }
+
+    // Relief Score Line & Dots
+    if (reliefPoints.size > 1) {
+        val pathD = StringBuilder("M ${reliefPoints[0].first} ${reliefPoints[0].second}")
+        for (j in 1 until reliefPoints.size) {
+            pathD.append(" L ${reliefPoints[j].first} ${reliefPoints[j].second}")
+        }
+        svgBuilder.append("<path d=\"$pathD\" fill=\"none\" stroke=\"#F59E0B\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />")
+    }
+    reliefPoints.forEachIndexed { idx, (rx, ry) ->
+        val rVal = points[idx].third
+        if (rVal > 0) {
+            svgBuilder.append("<circle cx=\"$rx\" cy=\"$ry\" r=\"3.5\" fill=\"#F59E0B\" stroke=\"#FFFFFF\" stroke-width=\"1.5\" />")
+        }
+    }
+
+    svgBuilder.append("</svg>")
+    return svgBuilder.toString()
+}
+
+fun printOrSavePdf(context: Context, reportContent: String, patientName: String, logs: List<DosageLog> = emptyList()) {
     try {
         val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager
         if (printManager != null) {
             val webView = WebView(context)
+            val chartSvg = generateExportChartSvg(logs)
+
             val htmlContent = """
                 <!DOCTYPE html>
                 <html>
                 <head>
                     <meta charset="utf-8">
-                    <title>Informe Médico Cannabis</title>
+                    <title>Informe Médico Cannabis - $patientName</title>
                     <style>
                         body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 24px; color: #111; line-height: 1.5; }
-                        h1 { color: #064E3B; font-size: 20px; border-bottom: 2px solid #10B981; padding-bottom: 8px; }
-                        pre { background: #F8FAFC; border: 1px solid #E2E8F0; padding: 16px; border-radius: 8px; font-size: 12px; white-space: pre-wrap; word-wrap: break-word; }
+                        h1 { color: #064E3B; font-size: 20px; border-bottom: 2px solid #10B981; padding-bottom: 8px; margin-bottom: 6px; }
+                        .subtitle { font-size: 13px; color: #4B5563; margin-bottom: 16px; }
+                        .chart-box { margin: 16px 0; background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 8px; padding: 14px; }
+                        .chart-title { font-size: 13px; font-weight: bold; color: #0F172A; margin-bottom: 6px; }
+                        .chart-legend { display: flex; gap: 16px; font-size: 11px; color: #475569; margin-top: 6px; }
+                        .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+                        pre { background: #F8FAFC; border: 1px solid #E2E8F0; padding: 16px; border-radius: 8px; font-size: 12px; white-space: pre-wrap; word-wrap: break-word; font-family: monospace; }
                         .footer { margin-top: 30px; font-size: 11px; color: #64748B; border-top: 1px solid #E2E8F0; padding-top: 10px; }
                     </style>
                 </head>
                 <body>
                     <h1>CannaMed - Informe de Seguimiento de Cannabis Medicinal</h1>
+                    <div class="subtitle">Bitácora Farmacológica y Evolución Clínica • Paciente: <strong>$patientName</strong></div>
+
+                    <div class="chart-box">
+                        <div class="chart-title">Evolución Gráfica de Dosificación Diaria & Alivio Sintomático (Últimos 14 Días)</div>
+                        $chartSvg
+                        <div class="chart-legend">
+                            <span><span class="legend-dot" style="background:#10B981;"></span> Ingesta Flores Secas Equivalentes (g/día)</span>
+                            <span><span class="legend-dot" style="background:#F59E0B;"></span> Nivel de Alivio Sintomático (1-10)</span>
+                        </div>
+                    </div>
+
                     <pre>${reportContent.replace("<", "&lt;").replace(">", "&gt;")}</pre>
-                    <div class="footer">Generado por CannaMed • Almacenamiento Local Privado • Confidencial</div>
+                    <div class="footer">Generado por CannaMed • Almacenamiento Local Privado Sandbox • Conforme Ley N° 20.000 Chile • Confidencial</div>
                 </body>
                 </html>
             """.trimIndent()
@@ -675,3 +788,4 @@ fun printOrSavePdf(context: Context, reportContent: String, patientName: String)
         Toast.makeText(context, "Error al abrir la impresora/PDF", Toast.LENGTH_SHORT).show()
     }
 }
+

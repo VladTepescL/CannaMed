@@ -145,19 +145,6 @@ fun LegalDisclaimerScreen(
             )
         }
 
-        // Artificial Intelligence Disclaimer
-        item {
-            DisclaimerCard(
-                title = "Uso de Inteligencia Artificial (Gemini 3.8 Flash)",
-                icon = Icons.Default.Balance,
-                accentColor = EmeraldSecondary,
-                paragraphs = listOf(
-                    "El Asistente Clínico integrado utiliza modelos avanzados de inteligencia artificial (Gemini 3.8 Flash a través de Firebase AI Logic) para proporcionar orientación botánica, propiedades de cepas, perfiles de terpenos y prácticas de autocultivo orgánico.",
-                    "Las respuestas generadas por IA tienen carácter meramente orientativo y educativo. No constituyen diagnósticos clínicos ni órdenes médicas.",
-                    "La interacción con la IA no establece una relación médico-paciente ni profesional-cliente."
-                )
-            )
-        }
 
         // Privacy and Data Protection Compliance
         item {

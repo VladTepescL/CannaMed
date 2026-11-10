@@ -62,7 +62,6 @@ import com.example.ui.screens.DoctorReportScreen
 import com.example.ui.screens.DosageJournalScreen
 import com.example.ui.screens.DoseWizardScreen
 import com.example.ui.screens.EmergencyRecorderScreen
-import com.example.ui.screens.GeminiCannabisChatScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LegalDisclaimerScreen
 import com.example.ui.screens.LegalFrameworkScreen
@@ -96,9 +95,6 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Step 1: Configure Firebase App Check with launch intent before UI/ViewModels
-        com.example.util.configureAppCheck(this, intent)
-
         securityPrefs = SecurityPreferences(this)
 
         // Apply anti-screenshot protection if enabled
@@ -259,7 +255,6 @@ fun CannaMedMainApp(
         NavTabItem("Diario", Icons.Default.Book, "nav_journal"),
         NavTabItem("Clear Pods", Icons.Default.ElectricBolt, "nav_cartridges"),
         NavTabItem("Cepas", Icons.Default.Spa, "nav_strains"),
-        NavTabItem("Asesor IA", Icons.Default.AutoAwesome, "nav_ai_chat"),
         NavTabItem("Médico", Icons.Default.LocalHospital, "nav_doctor"),
         NavTabItem("Legal", Icons.Default.Shield, "nav_disclaimer")
     )
@@ -421,11 +416,8 @@ fun CannaMedMainApp(
                         onSaveCustomStrain = { viewModel.saveStrain(it) }
                     )
 
-                    // TAB 4: ASESOR IA (GEMINI 3.8 FLASH - CANNABIS MEDICINAL Y AUTOCULTIVO ORGÁNICO)
-                    4 -> GeminiCannabisChatScreen()
-
-                    // TAB 5: ÁREA MÉDICA (INFORME, RECETAS Y MARCO JURÍDICO LEY 20.000 CHILE)
-                    5 -> {
+                    // TAB 4: ÁREA MÉDICA (INFORME, RECETAS Y MARCO JURÍDICO LEY 20.000 CHILE)
+                    4 -> {
                         Column(modifier = Modifier.fillMaxSize()) {
                             ScrollableTabRow(
                                 selectedTabIndex = doctorSubTab,
@@ -486,8 +478,8 @@ fun CannaMedMainApp(
                         }
                     }
 
-                    // TAB 6: CONTROL DE VERSIÓN, DESCARGO DE RESPONSABILIDAD Y NORMATIVAS DE SEGURIDAD
-                    6 -> LegalDisclaimerScreen(
+                    // TAB 5: CONTROL DE VERSIÓN, DESCARGO DE RESPONSABILIDAD Y NORMATIVAS DE SEGURIDAD
+                    5 -> LegalDisclaimerScreen(
                         onToggleScreenshotProtection = onToggleScreenshotProtection
                     )
                 }

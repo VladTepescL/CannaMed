@@ -55,6 +55,7 @@ import com.example.data.model.CannabisFormat
 import com.example.data.model.DosageLog
 import com.example.ui.DailyGramsProgress
 import com.example.ui.QuickStats
+import com.example.ui.components.D3DosageEvolutionChart
 import com.example.ui.theme.EmeraldPrimary
 import com.example.ui.theme.EmeraldSecondary
 import com.example.ui.theme.EmeraldTertiary
@@ -141,6 +142,11 @@ fun DosageJournalScreen(
                         accentColor = EmeraldTertiary
                     )
                 }
+            }
+
+            // D3 & Compose Dosage Evolution & History Chart
+            item {
+                D3DosageEvolutionChart(logs = logs)
             }
 
             // Filter Tabs
