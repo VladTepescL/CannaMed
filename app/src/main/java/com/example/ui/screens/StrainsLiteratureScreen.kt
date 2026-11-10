@@ -79,8 +79,10 @@ fun StrainsLiteratureScreen(
     onSaveCustomStrain: (StrainInfo) -> Unit
 ) {
     val context = LocalContext.current
+    val secPrefs = remember { com.example.util.SecurityPreferences(context) }
     var showAddStrainDialog by remember { mutableStateOf(false) }
     var showTerpenesGuide by remember { mutableStateOf(false) }
+    var showInterstitialAfterStrain by remember { mutableStateOf(false) }
 
     // Autocomplete filtering from in-memory strainNamesList
     val autocompleteSuggestions = remember(searchQuery, strainNamesList) {
@@ -221,6 +223,11 @@ fun StrainsLiteratureScreen(
                     }
                 }
             }
+        }
+
+        // Simulated AdMob Banner below search bar (hidden if isPremium)
+        item {
+            com.example.ui.components.SimulatedAdMobBanner(isPremium = secPrefs.isPremium)
         }
 
         // SEGMENT 1: 4 OPCIONES (2 CUADROS DE 2 FILAS) PARA SATIVA, INDICA, HÍBRIDA, ALTO CBD
@@ -452,7 +459,18 @@ fun StrainsLiteratureScreen(
             onSave = {
                 onSaveCustomStrain(it)
                 showAddStrainDialog = false
+                if (!secPrefs.isPremium) {
+                    showInterstitialAfterStrain = true
+                }
             }
+        )
+    }
+
+    if (showInterstitialAfterStrain && !secPrefs.isPremium) {
+        com.example.ui.components.SimulatedAdMobInterstitialDialog(
+            isPremium = secPrefs.isPremium,
+            actionContext = "Cepa Personalizada Guardada",
+            onDismiss = { showInterstitialAfterStrain = false }
         )
     }
 }

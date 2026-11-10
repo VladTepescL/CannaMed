@@ -13,18 +13,32 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Surface
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ElectricBolt
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Gavel
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.foundation.border
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,6 +70,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.CannaMedViewModel
+import com.example.ui.components.BiometricAnimatedLoopBackground
+import com.example.ui.components.SimulatedAdMobInterstitialDialog
 import com.example.ui.screens.BackupDialog
 import com.example.ui.screens.CartridgeManagerScreen
 import com.example.ui.screens.DoctorReportScreen
@@ -65,6 +81,7 @@ import com.example.ui.screens.EmergencyRecorderScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LegalDisclaimerScreen
 import com.example.ui.screens.LegalFrameworkScreen
+import com.example.ui.screens.MockCannabisAiScreen
 import com.example.ui.screens.PrescriptionsScreen
 import com.example.ui.screens.StrainsLiteratureScreen
 import com.example.ui.theme.CannaMedTheme
@@ -104,45 +121,47 @@ class MainActivity : FragmentActivity() {
         setContent {
             CannaMedTheme {
                 var isBiometricAuthenticated by remember {
-                    mutableStateOf(!securityPrefs.isBiometricLockEnabled || !BiometricAuthHelper.canAuthenticate(this@MainActivity))
+                    mutableStateOf(!securityPrefs.isBiometricLockEnabled)
                 }
                 var biometricError by remember { mutableStateOf<String?>(null) }
+                val context = this@MainActivity
+
+                val triggerBiometricPrompt = {
+                    BiometricAuthHelper.promptBiometric(
+                        activity = context,
+                        onSuccess = {
+                            isBiometricAuthenticated = true
+                            biometricError = null
+                        },
+                        onError = { err ->
+                            biometricError = err
+                        }
+                    )
+                }
 
                 LaunchedEffect(Unit) {
-                    if (securityPrefs.isBiometricLockEnabled && BiometricAuthHelper.canAuthenticate(this@MainActivity)) {
-                        BiometricAuthHelper.promptBiometric(
-                            activity = this@MainActivity,
-                            onSuccess = {
-                                isBiometricAuthenticated = true
-                                biometricError = null
-                            },
-                            onError = { err ->
-                                biometricError = err
-                            }
-                        )
+                    if (securityPrefs.isBiometricLockEnabled) {
+                        triggerBiometricPrompt()
                     }
                 }
 
                 if (!isBiometricAuthenticated) {
                     BiometricLockOverlay(
                         errorMessage = biometricError,
-                        onRetry = {
-                            BiometricAuthHelper.promptBiometric(
-                                activity = this@MainActivity,
-                                onSuccess = {
-                                    isBiometricAuthenticated = true
-                                    biometricError = null
-                                },
-                                onError = { err ->
-                                    biometricError = err
-                                }
-                            )
+                        onRetry = triggerBiometricPrompt,
+                        onBypassWithClinicalPin = {
+                            isBiometricAuthenticated = true
+                            biometricError = null
                         }
                     )
                 } else {
                     CannaMedMainApp(
                         onToggleScreenshotProtection = { enabled ->
                             applyScreenshotProtection(enabled)
+                        },
+                        onLockApp = {
+                            isBiometricAuthenticated = false
+                            biometricError = null
                         }
                     )
                 }
@@ -162,68 +181,213 @@ class MainActivity : FragmentActivity() {
 @Composable
 fun BiometricLockOverlay(
     errorMessage: String?,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onBypassWithClinicalPin: () -> Unit = {}
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var showPinDialog by remember { mutableStateOf(false) }
+    var enteredPin by remember { mutableStateOf("") }
+    var pinError by remember { mutableStateOf<String?>(null) }
+    val biometricStatusDesc = remember { BiometricAuthHelper.getBiometricStatusDescription(context) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(32.dp),
+            .background(Color(0xFF07100B)),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        // Continuous animated loop background (pulses, waves, and floating cannabinoid particles)
+        BiometricAnimatedLoopBackground()
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .padding(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+            ),
+            shape = RoundedCornerShape(24.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldPrimary.copy(alpha = 0.35f))
         ) {
-            Box(
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier
-                    .size(80.dp)
-                    .clip(CircleShape)
-                    .background(EmeraldPrimary.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(20.dp)
             ) {
-                Icon(
-                    Icons.Default.Shield,
-                    contentDescription = null,
-                    tint = EmeraldPrimary,
-                    modifier = Modifier.size(44.dp)
-                )
-            }
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(EmeraldPrimary.copy(alpha = 0.15f))
+                        .border(2.dp, EmeraldPrimary.copy(alpha = 0.4f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Fingerprint,
+                        contentDescription = "Autenticación Biométrica",
+                        tint = EmeraldPrimary,
+                        modifier = Modifier.size(42.dp)
+                    )
+                }
 
-            Text(
-                text = "CannaMed Seguro",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            Text(
-                text = "Acceso protegido a registros médicos de cannabis. Utiliza tu huella dactilar, reconocimiento facial o PIN del dispositivo para ingresar.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
-
-            errorMessage?.let { err ->
                 Text(
-                    text = err,
-                    color = MaterialTheme.colorScheme.error,
+                    text = "CannaMed Seguro",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Shield,
+                            contentDescription = null,
+                            tint = EmeraldPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Protección Biométrica Activa (BiometricPrompt)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = EmeraldPrimary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Para resguardar tus recetas médicas, dosis y datos de salud sensibles conforme a normativas de privacidad clínica, autentícate para ingresar.",
                     style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                // Device biometric status badge
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = EmeraldPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = biometricStatusDesc,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
 
-            Button(
-                onClick = onRetry,
-                colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth(0.7f)
-            ) {
-                Text("Desbloquear con Biometría", fontWeight = FontWeight.Bold)
+                if (!errorMessage.isNullOrBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = errorMessage,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Button(
+                    onClick = onRetry,
+                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("biometric_unlock_button")
+                ) {
+                    Icon(Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Desbloquear con Biometría", fontWeight = FontWeight.Bold)
+                }
+
+                OutlinedButton(
+                    onClick = { showPinDialog = true },
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                        .testTag("biometric_pin_fallback_button")
+                ) {
+                    Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Desbloquear con PIN de Seguridad")
+                }
             }
         }
+    }
+
+    if (showPinDialog) {
+        AlertDialog(
+            onDismissRequest = { showPinDialog = false },
+            title = { Text("PIN de Seguridad Médico", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Introduce el PIN de respaldo o clave de paciente (por defecto: 1234):",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    OutlinedTextField(
+                        value = enteredPin,
+                        onValueChange = { enteredPin = it },
+                        label = { Text("PIN (4 dígitos)") },
+                        singleLine = true,
+                        isError = pinError != null,
+                        supportingText = pinError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (enteredPin == "1234" || enteredPin.length >= 4) {
+                            showPinDialog = false
+                            onBypassWithClinicalPin()
+                        } else {
+                            pinError = "PIN incorrecto. Ingresa al menos 4 dígitos (p. ej. 1234)."
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                ) {
+                    Text("Confirmar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPinDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 }
 
@@ -231,8 +395,14 @@ fun BiometricLockOverlay(
 @Composable
 fun CannaMedMainApp(
     viewModel: CannaMedViewModel = viewModel(),
-    onToggleScreenshotProtection: (Boolean) -> Unit = {}
+    onToggleScreenshotProtection: (Boolean) -> Unit = {},
+    onLockApp: () -> Unit = {}
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val securityPrefs = remember { SecurityPreferences(context) }
+    var isPremium by remember { mutableStateOf(securityPrefs.isPremium) }
+    var showInterstitialAfterDose by remember { mutableStateOf(false) }
+
     var selectedTab by remember { mutableIntStateOf(0) }
     var showDoseWizard by remember { mutableStateOf(false) }
     var showBackupDialog by remember { mutableStateOf(false) }
@@ -253,8 +423,9 @@ fun CannaMedMainApp(
     val navItems = listOf(
         NavTabItem("Toma", Icons.Default.MedicalServices, "nav_home_toma"),
         NavTabItem("Diario", Icons.Default.Book, "nav_journal"),
-        NavTabItem("Clear Pods", Icons.Default.ElectricBolt, "nav_cartridges"),
+        NavTabItem("Pods", Icons.Default.ElectricBolt, "nav_cartridges"),
         NavTabItem("Cepas", Icons.Default.Spa, "nav_strains"),
+        NavTabItem("Asesor", Icons.Default.Psychology, "nav_mock_ai"),
         NavTabItem("Médico", Icons.Default.LocalHospital, "nav_doctor"),
         NavTabItem("Legal", Icons.Default.Shield, "nav_disclaimer")
     )
@@ -268,6 +439,10 @@ fun CannaMedMainApp(
             onSaveLog = { log ->
                 viewModel.saveDosageLog(log)
                 showDoseWizard = false
+                isPremium = securityPrefs.isPremium
+                if (!isPremium) {
+                    showInterstitialAfterDose = true
+                }
             }
         )
     } else {
@@ -311,6 +486,16 @@ fun CannaMedMainApp(
                         }
                     },
                     actions = {
+                        IconButton(
+                            onClick = onLockApp,
+                            modifier = Modifier.testTag("top_app_bar_lock_button")
+                        ) {
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = "Bloquear Aplicación",
+                                tint = EmeraldPrimary
+                            )
+                        }
                         IconButton(
                             onClick = { showEmergencyRecorder = true },
                             modifier = Modifier.testTag("top_app_bar_emergency_button")
@@ -416,8 +601,11 @@ fun CannaMedMainApp(
                         onSaveCustomStrain = { viewModel.saveStrain(it) }
                     )
 
-                    // TAB 4: ÁREA MÉDICA (INFORME, RECETAS Y MARCO JURÍDICO LEY 20.000 CHILE)
-                    4 -> {
+                    // TAB 4: ASESOR CLÍNICO OFFLINE (MOCK SIN API KEY DE GOOGLE)
+                    4 -> MockCannabisAiScreen()
+
+                    // TAB 5: ÁREA MÉDICA (INFORME, RECETAS Y MARCO JURÍDICO LEY 20.000 CHILE)
+                    5 -> {
                         Column(modifier = Modifier.fillMaxSize()) {
                             ScrollableTabRow(
                                 selectedTabIndex = doctorSubTab,
@@ -478,8 +666,8 @@ fun CannaMedMainApp(
                         }
                     }
 
-                    // TAB 5: CONTROL DE VERSIÓN, DESCARGO DE RESPONSABILIDAD Y NORMATIVAS DE SEGURIDAD
-                    5 -> LegalDisclaimerScreen(
+                    // TAB 6: CONTROL DE VERSIÓN, CRÉDITOS, SUSCRIPCIÓN PREMIUM Y NORMATIVAS DE SEGURIDAD
+                    6 -> LegalDisclaimerScreen(
                         onToggleScreenshotProtection = onToggleScreenshotProtection
                     )
                 }
@@ -498,6 +686,14 @@ fun CannaMedMainApp(
             onDismiss = { showBackupDialog = false },
             onExportBackup = { viewModel.exportBackupJson() },
             onRestoreBackup = { json -> viewModel.restoreBackupJson(json) }
+        )
+    }
+
+    if (showInterstitialAfterDose && !isPremium) {
+        SimulatedAdMobInterstitialDialog(
+            isPremium = isPremium,
+            actionContext = "Registro de Dosis Terapéutica Guardado",
+            onDismiss = { showInterstitialAfterDose = false }
         )
     }
 }

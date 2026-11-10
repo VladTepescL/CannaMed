@@ -85,6 +85,13 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+enum class ReportDetailTier(val label: String, val subtitle: String) {
+    BASIC("Básico", "Datos del paciente, prescripciones y total de tomas"),
+    INTERMEDIATE("Intermedio", "Básico + formatos y promedios de alivio"),
+    ADVANCED("Avanzado", "Intermedio + Clear Pods, terpenos y notas"),
+    COMPLETE("Completo", "Avanzado + gráficos vectoriales D3/SVG de los datos")
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DoctorReportScreen(
@@ -96,6 +103,7 @@ fun DoctorReportScreen(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
 
+    var selectedTier by remember { mutableStateOf(ReportDetailTier.COMPLETE) }
     var patientName by remember { mutableStateOf("Paciente") }
     var doctorName by remember {
         mutableStateOf(prescriptions.firstOrNull()?.doctorName ?: "Dra. Sofía Mendoza")
@@ -196,6 +204,93 @@ fun DoctorReportScreen(
             }
         }
 
+        // 1. Configurable Report Tier (Básico, Intermedio, Avanzado, Completo)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Assessment, contentDescription = null, tint = EmeraldPrimary)
+                        Text(
+                            text = "1. Nivel de Detalle del Informe:",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        ReportDetailTier.values().forEach { tier ->
+                            val isSelected = selectedTier == tier
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    selectedTier = tier
+                                    when (tier) {
+                                        ReportDetailTier.BASIC -> {
+                                            incDoseSummary = true
+                                            incReliefAndCharts = false
+                                            incFormatsBreakdown = false
+                                            incClearPodsAndTerpenes = false
+                                            incSubjectiveNotes = false
+                                            incPrescriptions = true
+                                        }
+                                        ReportDetailTier.INTERMEDIATE -> {
+                                            incDoseSummary = true
+                                            incReliefAndCharts = true
+                                            incFormatsBreakdown = true
+                                            incClearPodsAndTerpenes = false
+                                            incSubjectiveNotes = false
+                                            incPrescriptions = true
+                                        }
+                                        ReportDetailTier.ADVANCED -> {
+                                            incDoseSummary = true
+                                            incReliefAndCharts = true
+                                            incFormatsBreakdown = true
+                                            incClearPodsAndTerpenes = true
+                                            incSubjectiveNotes = true
+                                            incPrescriptions = true
+                                        }
+                                        ReportDetailTier.COMPLETE -> {
+                                            incDoseSummary = true
+                                            incReliefAndCharts = true
+                                            incFormatsBreakdown = true
+                                            incClearPodsAndTerpenes = true
+                                            incSubjectiveNotes = true
+                                            incPrescriptions = true
+                                        }
+                                    }
+                                },
+                                label = { Text(tier.label, fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = EmeraldPrimary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = selectedTier.subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = EmeraldSecondary,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
+
         // Time Period Selector Card (1, 3, 6, 12 meses)
         item {
             Card(
@@ -213,7 +308,7 @@ fun DoctorReportScreen(
                     ) {
                         Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = EmeraldPrimary)
                         Text(
-                            text = "1. Período de Tiempo del Informe:",
+                            text = "2. Período de Tiempo del Informe:",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold
                         )
@@ -352,7 +447,13 @@ fun DoctorReportScreen(
                     ) {
                         Button(
                             onClick = {
-                                printOrSavePdf(context, reportText, patientName, periodLogs)
+                                printOrSavePdf(
+                                    context = context,
+                                    reportContent = reportText,
+                                    patientName = patientName,
+                                    logs = periodLogs,
+                                    includeCharts = (selectedTier == ReportDetailTier.COMPLETE)
+                                )
                             },
                             modifier = Modifier.weight(1f).testTag("print_report_button"),
                             colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
@@ -367,10 +468,10 @@ fun DoctorReportScreen(
                             onClick = {
                                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
-                                    putExtra(Intent.EXTRA_SUBJECT, "Informe Médico Cannabis - $patientName")
+                                    putExtra(Intent.EXTRA_SUBJECT, "Informe Clínico Cannabis ($patientName) - Nivel ${selectedTier.label}")
                                     putExtra(Intent.EXTRA_TEXT, reportText)
                                 }
-                                context.startActivity(Intent.createChooser(shareIntent, "Enviar a Médico"))
+                                context.startActivity(Intent.createChooser(shareIntent, "Enviar Informe Médico vía (WhatsApp, Correo, etc.)"))
                             },
                             modifier = Modifier.weight(1f).testTag("share_report_button"),
                             colors = ButtonDefaults.buttonColors(containerColor = EmeraldSecondaryContainer),
@@ -730,12 +831,31 @@ fun generateExportChartSvg(logs: List<DosageLog>): String {
     return svgBuilder.toString()
 }
 
-fun printOrSavePdf(context: Context, reportContent: String, patientName: String, logs: List<DosageLog> = emptyList()) {
+fun printOrSavePdf(
+    context: Context,
+    reportContent: String,
+    patientName: String,
+    logs: List<DosageLog> = emptyList(),
+    includeCharts: Boolean = true
+) {
     try {
         val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager
         if (printManager != null) {
             val webView = WebView(context)
-            val chartSvg = generateExportChartSvg(logs)
+            val chartSvg = if (includeCharts) generateExportChartSvg(logs) else ""
+
+            val chartSectionHtml = if (includeCharts && chartSvg.isNotBlank()) {
+                """
+                    <div class="chart-box">
+                        <div class="chart-title">Evolución Gráfica de Dosificación Diaria & Alivio Sintomático (Últimos 14 Días)</div>
+                        $chartSvg
+                        <div class="chart-legend">
+                            <span><span class="legend-dot" style="background:#10B981;"></span> Ingesta Flores Secas Equivalentes (g/día)</span>
+                            <span><span class="legend-dot" style="background:#F59E0B;"></span> Nivel de Alivio Sintomático (1-10)</span>
+                        </div>
+                    </div>
+                """.trimIndent()
+            } else ""
 
             val htmlContent = """
                 <!DOCTYPE html>
@@ -759,14 +879,7 @@ fun printOrSavePdf(context: Context, reportContent: String, patientName: String,
                     <h1>CannaMed - Informe de Seguimiento de Cannabis Medicinal</h1>
                     <div class="subtitle">Bitácora Farmacológica y Evolución Clínica • Paciente: <strong>$patientName</strong></div>
 
-                    <div class="chart-box">
-                        <div class="chart-title">Evolución Gráfica de Dosificación Diaria & Alivio Sintomático (Últimos 14 Días)</div>
-                        $chartSvg
-                        <div class="chart-legend">
-                            <span><span class="legend-dot" style="background:#10B981;"></span> Ingesta Flores Secas Equivalentes (g/día)</span>
-                            <span><span class="legend-dot" style="background:#F59E0B;"></span> Nivel de Alivio Sintomático (1-10)</span>
-                        </div>
-                    </div>
+                    $chartSectionHtml
 
                     <pre>${reportContent.replace("<", "&lt;").replace(">", "&gt;")}</pre>
                     <div class="footer">Generado por CannaMed • Almacenamiento Local Privado Sandbox • Conforme Ley N° 20.000 Chile • Confidencial</div>

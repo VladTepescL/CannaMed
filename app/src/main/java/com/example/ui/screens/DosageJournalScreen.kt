@@ -149,6 +149,13 @@ fun DosageJournalScreen(
                 D3DosageEvolutionChart(logs = logs)
             }
 
+            // Simulated AdMob Banner in history view (hidden if isPremium)
+            item {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val secPrefs = remember { com.example.util.SecurityPreferences(context) }
+                com.example.ui.components.SimulatedAdMobBanner(isPremium = secPrefs.isPremium)
+            }
+
             // Filter Tabs
             item {
                 ScrollableTabRow(

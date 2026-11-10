@@ -32,7 +32,9 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -105,6 +107,43 @@ fun BackupDialog(
     var restorePassword by remember { mutableStateOf("") }
     var showRestorePassword by remember { mutableStateOf(false) }
     var pendingEncryptedPayload by remember { mutableStateOf<String?>(null) }
+
+    // Launcher for saving directly to phone local storage
+    var pendingExportPayloadForSave by remember { mutableStateOf<String?>(null) }
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        if (uri != null && pendingExportPayloadForSave != null) {
+            coroutineScope.launch {
+                isLoading = true
+                try {
+                    context.contentResolver.openOutputStream(uri)?.use { stream ->
+                        stream.write(pendingExportPayloadForSave!!.toByteArray(Charsets.UTF_8))
+                    }
+                    Toast.makeText(context, "Respaldo guardado en almacenamiento local", Toast.LENGTH_LONG).show()
+                    lastBackupStatusMessage = "¡Respaldo guardado con éxito en almacenamiento local de tu dispositivo!"
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Error al guardar: ${e.message}", Toast.LENGTH_SHORT).show()
+                } finally {
+                    isLoading = false
+                    pendingExportPayloadForSave = null
+                }
+            }
+        }
+    }
+
+    suspend fun preparePayload(): String? {
+        if (exportModeTab == 0 && exportPassword.length < 6) {
+            Toast.makeText(context, "Ingresa una contraseña de al menos 6 caracteres", Toast.LENGTH_SHORT).show()
+            return null
+        }
+        val rawJson = onExportBackup()
+        return if (exportModeTab == 0) {
+            CryptoSecurityUtil.encryptPayload(rawJson, exportPassword.toCharArray())
+        } else {
+            rawJson
+        }
+    }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -222,7 +261,7 @@ fun BackupDialog(
                                 )
                             }
                             Text(
-                                text = "Tus recetas, tomas, dolencias y documentos médicos residen 100% de forma local en tu dispositivo. Para exportaciones a la nube (Google Drive) o correo, puedes aplicar cifrado de grado médico AES-256-GCM con contraseña personal.",
+                                text = "Tus recetas, tomas, dolencias y documentos médicos residen 100% de forma local en tu dispositivo, sin conexión a servidores externos ni APIs de terceros. Para respaldar de forma segura en tus archivos locales o almacenamiento personal, puedes aplicar cifrado de grado médico AES-256-GCM con contraseña personal.",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -272,75 +311,98 @@ fun BackupDialog(
                         )
                     }
 
-                    Button(
-                        onClick = {
-                            if (exportModeTab == 0 && exportPassword.length < 6) {
-                                Toast.makeText(context, "Ingresa una contraseña de al menos 6 caracteres", Toast.LENGTH_SHORT).show()
-                                return@Button
-                            }
-
-                            coroutineScope.launch {
-                                isLoading = true
-                                try {
-                                    val rawJson = onExportBackup()
-                                    val finalPayload = if (exportModeTab == 0) {
-                                        CryptoSecurityUtil.encryptPayload(rawJson, exportPassword.toCharArray())
-                                    } else {
-                                        rawJson
-                                    }
-
-                                    val dateStr = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())
-                                    val filePrefix = if (exportModeTab == 0) "CannaMed_EncryptedBackup_" else "CannaMed_Backup_"
-                                    val fileName = "$filePrefix$dateStr.json"
-
-                                    val backupDir = File(context.cacheDir, "backups")
-                                    if (!backupDir.exists()) backupDir.mkdirs()
-                                    val backupFile = File(backupDir, fileName)
-                                    FileOutputStream(backupFile).use { it.write(finalPayload.toByteArray(Charsets.UTF_8)) }
-
-                                    val fileUri = FileProvider.getUriForFile(
-                                        context,
-                                        "${context.packageName}.fileprovider",
-                                        backupFile
-                                    )
-
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "application/json"
-                                        putExtra(Intent.EXTRA_STREAM, fileUri)
-                                        putExtra(Intent.EXTRA_SUBJECT, "Copia de Seguridad CannaMed ($fileName)")
-                                        putExtra(Intent.EXTRA_TEXT, "Archivo de respaldo médico seguro CannaMed.")
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    }
-                                    context.startActivity(Intent.createChooser(shareIntent, "Guardar en Google Drive, Archivos o Enviar"))
-                                    lastBackupStatusMessage = if (exportModeTab == 0) {
-                                        "Respaldo cifrado con éxito con AES-256. Recuerda tu contraseña para restaurarlo."
-                                    } else {
-                                        "Respaldo generado exitosamente."
-                                    }
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                                } finally {
-                                    isLoading = false
-                                }
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .testTag("export_backup_button"),
-                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                        shape = RoundedCornerShape(12.dp),
-                        enabled = !isLoading
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
-                        } else {
-                            Icon(if (exportModeTab == 0) Icons.Default.Lock else Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                if (exportModeTab == 0) "Exportar Respaldo Cifrado AES-256" else "Exportar JSON Estándar",
-                                fontWeight = FontWeight.Bold
-                            )
+                        // Button 1: Save directly to device storage
+                        Button(
+                            onClick = {
+                                coroutineScope.launch {
+                                    isLoading = true
+                                    try {
+                                        val payload = preparePayload() ?: return@launch
+                                        val dateStr = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())
+                                        val filePrefix = if (exportModeTab == 0) "CannaMed_Encrypted_" else "CannaMed_Backup_"
+                                        val fileName = "$filePrefix$dateStr.json"
+                                        pendingExportPayloadForSave = payload
+                                        createDocumentLauncher.launch(fileName)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    } finally {
+                                        isLoading = false
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp)
+                                .testTag("save_local_backup_button"),
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                            shape = RoundedCornerShape(12.dp),
+                            enabled = !isLoading
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
+                            } else {
+                                Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Guardar en Archivos Locales", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+
+                        // Button 2: Send with all Android apps (WhatsApp, Telegram, Mail, Drive, etc.)
+                        OutlinedButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    isLoading = true
+                                    try {
+                                        val payload = preparePayload() ?: return@launch
+                                        val dateStr = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())
+                                        val filePrefix = if (exportModeTab == 0) "CannaMed_Encrypted_" else "CannaMed_Backup_"
+                                        val fileName = "$filePrefix$dateStr.json"
+
+                                        val backupDir = File(context.cacheDir, "backups")
+                                        if (!backupDir.exists()) backupDir.mkdirs()
+                                        val backupFile = File(backupDir, fileName)
+                                        FileOutputStream(backupFile).use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+
+                                        val fileUri = FileProvider.getUriForFile(
+                                            context,
+                                            "${context.packageName}.fileprovider",
+                                            backupFile
+                                        )
+
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "application/json"
+                                            putExtra(Intent.EXTRA_STREAM, fileUri)
+                                            putExtra(Intent.EXTRA_SUBJECT, "Copia de Seguridad CannaMed ($fileName)")
+                                            putExtra(Intent.EXTRA_TEXT, "Archivo de respaldo médico seguro CannaMed.")
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, "Enviar Respaldo con Android (WhatsApp, Correo, Drive, etc.)"))
+                                        lastBackupStatusMessage = if (exportModeTab == 0) {
+                                            "Respaldo cifrado listo para enviar. Recuerda tu clave AES-256."
+                                        } else {
+                                            "Respaldo listo para enviar."
+                                        }
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    } finally {
+                                        isLoading = false
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp)
+                                .testTag("share_android_backup_button"),
+                            shape = RoundedCornerShape(12.dp),
+                            enabled = !isLoading
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp), tint = EmeraldPrimary)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Enviar con Opciones Android", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = EmeraldPrimary)
                         }
                     }
 

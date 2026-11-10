@@ -16,9 +16,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
@@ -26,6 +28,11 @@ import androidx.compose.material.icons.filled.MedicalInformation
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.fragment.app.FragmentActivity
+import com.example.util.BiometricAuthHelper
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -226,8 +233,8 @@ fun LegalDisclaimerScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Bloqueo Biométrico al Iniciar", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                            Text("Requiere huella dactilar o reconocimiento facial al abrir la app.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Bloqueo Biométrico al Iniciar (BiometricPrompt)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Text("Requiere huella dactilar, reconocimiento facial o PIN al abrir la app.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         androidx.compose.material3.Switch(
                             checked = biometricEnabled,
@@ -240,6 +247,53 @@ fun LegalDisclaimerScreen(
                                 checkedTrackColor = EmeraldPrimary.copy(alpha = 0.5f)
                             )
                         )
+                    }
+
+                    // Biometric hardware status
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.Fingerprint, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(18.dp))
+                            Text(
+                                text = BiometricAuthHelper.getBiometricStatusDescription(context),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Biometric Test Button
+                    OutlinedButton(
+                        onClick = {
+                            val activity = context as? FragmentActivity
+                            if (activity != null) {
+                                BiometricAuthHelper.promptBiometric(
+                                    activity = activity,
+                                    title = "Prueba de Biometría CannaMed",
+                                    subtitle = "Verificación de sensor biométrico y PIN",
+                                    onSuccess = {
+                                        Toast.makeText(context, "¡Autenticación biométrica exitosa!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    onError = { err ->
+                                        Toast.makeText(context, "Biometría: $err", Toast.LENGTH_LONG).show()
+                                    }
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Probar Autenticación Biométrica Ahora")
                     }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -266,6 +320,234 @@ fun LegalDisclaimerScreen(
                                 checkedTrackColor = EmeraldPrimary.copy(alpha = 0.5f)
                             )
                         )
+                    }
+                }
+            }
+        }
+
+        // Premium & AdMob Subscription Configuration Card
+        item {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val secPrefs = remember { com.example.util.SecurityPreferences(context) }
+            var isPremium by remember { mutableStateOf(secPrefs.isPremium) }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        1.dp,
+                        if (isPremium) EmeraldPrimary else MaterialTheme.colorScheme.outlineVariant,
+                        RoundedCornerShape(16.dp)
+                    )
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isPremium) EmeraldPrimary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceContainerHighest),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.VerifiedUser,
+                                    contentDescription = null,
+                                    tint = if (isPremium) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = if (isPremium) "CannaMed Premium Activo" else "CannaMed con Anuncios (AdMob)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isPremium) EmeraldPrimary else MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (isPremium) "Experiencia limpia sin anuncios y funciones avanzadas" else "Publicidad simulada activa en bitácora e historial",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        androidx.compose.material3.Switch(
+                            checked = isPremium,
+                            onCheckedChange = {
+                                isPremium = it
+                                secPrefs.isPremium = it
+                                Toast.makeText(
+                                    context,
+                                    if (it) "¡Modo Premium activado! Anuncios AdMob ocultados" else "Modo Estándar con Anuncios activado",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            },
+                            colors = androidx.compose.material3.SwitchDefaults.colors(
+                                checkedThumbColor = EmeraldPrimary,
+                                checkedTrackColor = EmeraldPrimary.copy(alpha = 0.5f)
+                            )
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = "Beneficios de la Arquitectura Premium:",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = EmeraldPrimary
+                            )
+                            Text("• Ocultación total de banners e interstitials de AdMob.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("• Informes clínicos sin marcas y con gráficos D3/SVG vectoriales completos.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("• Consulta ilimitada y sin interrupciones con el Asesor Clínico offline.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("• Nota de seguridad: La Ficha Médica y Grabación de Emergencia NUNCA tienen anuncios en ningún modo.", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = EmeraldSecondary)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Software Credits & Co-authorship Card
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, EmeraldPrimary.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(EmeraldPrimary.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Info, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(20.dp))
+                        }
+                        Column {
+                            Text(
+                                text = "Créditos y Equipo de Desarrollo",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Desarrollo Colaborativo y Arquitectura de Seguridad",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = EmeraldSecondary
+                            )
+                        }
+                    }
+
+                    // Author 1: VladTepescL
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(EmeraldPrimary),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("VT", color = androidx.compose.ui.graphics.Color.White, fontWeight = FontWeight.Bold)
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "VladTepescL",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Perfil de GitHub: github.com/VladTepescL",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = EmeraldPrimary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Fundador, Arquitecto de Software y Especialista en Farmacología Cannábica Terapéutica.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    // Author 2: AI Studio Coding Engine
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("AI", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "AI Studio Coding Engine",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Co-desarrollador de Ingeniería de Software",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Implementación en Jetpack Compose, Seguridad Criptográfica Zero-Knowledge, Biometría Android y Visualización Gráfica.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
             }

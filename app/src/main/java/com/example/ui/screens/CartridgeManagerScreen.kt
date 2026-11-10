@@ -87,7 +87,10 @@ fun CartridgeManagerScreen(
     onAddPuffs: (Long, Int) -> Unit,
     onMarkFinished: (Long) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val secPrefs = remember { com.example.util.SecurityPreferences(context) }
     var isAddFormExpanded by remember { mutableStateOf(false) }
+    var showInterstitialAfterPod by remember { mutableStateOf(false) }
     var selectedCartridgeForDetails by remember { mutableStateOf<Cartridge?>(null) }
     val finishedCartridges = remember(allCartridges) { allCartridges.filter { !it.isActive } }
 
@@ -138,6 +141,11 @@ fun CartridgeManagerScreen(
             }
         }
 
+        // Simulated AdMob Banner (hidden if isPremium)
+        item {
+            com.example.ui.components.SimulatedAdMobBanner(isPremium = secPrefs.isPremium)
+        }
+
         // Inline Add Cartridge Form (Nombre, Tipo, Proporciones / % de Cannabinoides)
         item {
             AnimatedVisibility(visible = isAddFormExpanded) {
@@ -152,6 +160,9 @@ fun CartridgeManagerScreen(
                         onSave = { newCart ->
                             onSaveCartridge(newCart)
                             isAddFormExpanded = false
+                            if (!secPrefs.isPremium) {
+                                showInterstitialAfterPod = true
+                            }
                         },
                         onCancel = { isAddFormExpanded = false }
                     )
@@ -267,6 +278,14 @@ fun CartridgeManagerScreen(
                 onMarkFinished(cart.id)
                 selectedCartridgeForDetails = null
             }
+        )
+    }
+
+    if (showInterstitialAfterPod && !secPrefs.isPremium) {
+        com.example.ui.components.SimulatedAdMobInterstitialDialog(
+            isPremium = secPrefs.isPremium,
+            actionContext = "Cápsula o Pod Clear Guardado",
+            onDismiss = { showInterstitialAfterPod = false }
         )
     }
 }
