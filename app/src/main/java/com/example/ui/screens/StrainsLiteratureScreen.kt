@@ -3,6 +3,7 @@ package com.example.ui.screens
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import java.util.Locale
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -186,7 +187,8 @@ fun StrainsLiteratureScreen(
                                             .border(1.dp, EmeraldPrimary.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
                                             .clickable {
                                                 onSearchQueryChange(suggestion)
-                                                openLeaflyUrl(context, "https://www.leafly.com/search?q=${URLEncoder.encode(suggestion, "UTF-8")}")
+                                                val slug = suggestion.trim().lowercase(Locale.ROOT).replace(" ", "-")
+                                                openLeaflyUrl(context, "https://www.leafly.com/strains/$slug")
                                             }
                                             .padding(horizontal = 10.dp, vertical = 6.dp)
                                     ) {
@@ -202,11 +204,13 @@ fun StrainsLiteratureScreen(
                         }
                     }
 
-                    // Direct Search button to Leafly.com
+                    // Direct Search button to Leafly.com for scientific reference
                     Button(
                         onClick = {
-                            val queryParam = if (searchQuery.isNotBlank()) searchQuery else "medical cannabis"
-                            openLeaflyUrl(context, "https://www.leafly.com/search?q=${URLEncoder.encode(queryParam, "UTF-8")}")
+                            val slug = if (searchQuery.isNotBlank()) {
+                                searchQuery.trim().lowercase(Locale.ROOT).replace(" ", "-")
+                            } else "charlottes-web"
+                            openLeaflyUrl(context, "https://www.leafly.com/strains/$slug")
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -217,7 +221,7 @@ fun StrainsLiteratureScreen(
                         Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (searchQuery.isNotBlank()) "Buscar '$searchQuery' en Leafly.com" else "Explorar Catálogo en Leafly.com",
+                            text = if (searchQuery.isNotBlank()) "Consultar Ficha Botánica de '$searchQuery'" else "Explorar Base Botánica Científica",
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -278,17 +282,17 @@ fun StrainsLiteratureScreen(
                         title = "Alto CBD",
                         subtitle = "Sin psicoactividad, antiinflamatorio",
                         badgeColor = EmeraldSecondary,
-                        onClick = { openLeaflyUrl(context, "https://www.leafly.com/search?q=high+cbd") }
+                        onClick = { openLeaflyUrl(context, "https://pubmed.ncbi.nlm.nih.gov/?term=cannabidiol+therapeutics") }
                     )
                 }
             }
         }
 
-        // SEGMENT 2: MISMO FORMATO DE CUADROS PARA DOLENCIAS (MIGRAÑA, ANSIEDAD, DEPRESIÓN, DOLOR CRÓNICO, ETC.)
+        // SEGMENT 2: MISMO FORMATO DE CUADROS PARA DOLENCIAS (EVIDENCIA CLÍNICA Y ENSAYOS MÉDICOS PUBMED)
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Cepas por Dolencia Médica (Búsqueda Directa Leafly):",
+                    text = "Evidencia Clínica y Ensayos Médicos (PubMed / NIH):",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = EmeraldSecondary
@@ -302,14 +306,14 @@ fun StrainsLiteratureScreen(
                     AilmentGridCard(
                         modifier = Modifier.weight(1f),
                         ailmentName = "Migraña",
-                        description = "Alivio cefaleas y náuseas",
-                        onClick = { openLeaflyUrl(context, "https://www.leafly.com/search?q=migraines") }
+                        description = "Ensayos clínicos en cefaleas (PubMed)",
+                        onClick = { openLeaflyUrl(context, "https://pubmed.ncbi.nlm.nih.gov/?term=cannabinoids+migraine") }
                     )
                     AilmentGridCard(
                         modifier = Modifier.weight(1f),
                         ailmentName = "Ansiedad",
-                        description = "Reducción de estrés y pánico",
-                        onClick = { openLeaflyUrl(context, "https://www.leafly.com/search?q=anxiety+relief") }
+                        description = "Ensayos anxiolíticos CBD (PubMed)",
+                        onClick = { openLeaflyUrl(context, "https://pubmed.ncbi.nlm.nih.gov/?term=cannabidiol+anxiety") }
                     )
                 }
 
@@ -321,14 +325,14 @@ fun StrainsLiteratureScreen(
                     AilmentGridCard(
                         modifier = Modifier.weight(1f),
                         ailmentName = "Depresión",
-                        description = "Elevación anímica y vitalidad",
-                        onClick = { openLeaflyUrl(context, "https://www.leafly.com/search?q=depression") }
+                        description = "Estudios neuroquímicos (PubMed)",
+                        onClick = { openLeaflyUrl(context, "https://pubmed.ncbi.nlm.nih.gov/?term=cannabinoids+depression") }
                     )
                     AilmentGridCard(
                         modifier = Modifier.weight(1f),
                         ailmentName = "Dolor Crónico",
-                        description = "Neuropatía, articulaciones y lumbar",
-                        onClick = { openLeaflyUrl(context, "https://www.leafly.com/search?q=chronic+pain") }
+                        description = "Ensayos dolor neuropático (PubMed)",
+                        onClick = { openLeaflyUrl(context, "https://pubmed.ncbi.nlm.nih.gov/?term=cannabinoids+chronic+pain") }
                     )
                 }
 
@@ -340,14 +344,14 @@ fun StrainsLiteratureScreen(
                     AilmentGridCard(
                         modifier = Modifier.weight(1f),
                         ailmentName = "Insomnio",
-                        description = "Inducción al sueño reparador",
-                        onClick = { openLeaflyUrl(context, "https://www.leafly.com/search?q=insomnia+sleep") }
+                        description = "Arquitectura del sueño (PubMed)",
+                        onClick = { openLeaflyUrl(context, "https://pubmed.ncbi.nlm.nih.gov/?term=cannabinoids+insomnia+sleep") }
                     )
                     AilmentGridCard(
                         modifier = Modifier.weight(1f),
                         ailmentName = "Espasmos",
-                        description = "Relajación muscular y temblores",
-                        onClick = { openLeaflyUrl(context, "https://www.leafly.com/search?q=spasms+tremors") }
+                        description = "Espasticidad muscular (PubMed)",
+                        onClick = { openLeaflyUrl(context, "https://pubmed.ncbi.nlm.nih.gov/?term=cannabinoids+spasticity") }
                     )
                 }
             }
@@ -404,7 +408,7 @@ fun StrainsLiteratureScreen(
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(MaterialTheme.colorScheme.surface)
                                     .clickable {
-                                        openLeaflyUrl(context, "https://www.leafly.com/search?q=${terp.name.lowercase()}")
+                                        openLeaflyUrl(context, "https://pubmed.ncbi.nlm.nih.gov/?term=${terp.name.lowercase()}+terpene+pharmacology")
                                     }
                                     .padding(8.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -415,10 +419,10 @@ fun StrainsLiteratureScreen(
                                         .size(12.dp)
                                         .clip(CircleShape)
                                         .background(terp.color)
-                                )
+                                 )
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "${terp.name} (Buscar en Leafly)",
+                                        text = "${terp.name} (Estudio Farmacológico PubMed)",
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = terp.color
@@ -574,9 +578,13 @@ fun AilmentGridCard(
 
 fun openLeaflyUrl(context: Context, url: String) {
     try {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            addCategory(Intent.CATEGORY_BROWSABLE)
+        }
         context.startActivity(intent)
-    } catch (_: Exception) {}
+    } catch (_: Exception) {
+        android.widget.Toast.makeText(context, "No se encontró navegador web disponible.", android.widget.Toast.LENGTH_SHORT).show()
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -796,7 +804,7 @@ fun AddCustomStrainDialog(
                                     flavorAroma = "Herbal",
                                     description = description,
                                     leaflySlug = slug,
-                                    leaflyUrl = "https://www.leafly.com/search?q=$slug",
+                                    leaflyUrl = "https://www.leafly.com/strains/$slug",
                                     isCustom = true
                                 )
                             )

@@ -299,4 +299,15 @@ class CannaMedViewModel(application: Application) : AndroidViewModel(application
             prescriptions = prescriptions.value
         )
     }
+
+    /**
+     * Clears all patient health records to comply with Google Play Data Safety
+     * and Right to be Forgotten policies.
+     */
+    fun clearAllUserData(onCompleted: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.clearAllUserData()
+            onCompleted()
+        }
+    }
 }

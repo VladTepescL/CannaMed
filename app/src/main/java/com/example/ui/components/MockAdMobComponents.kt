@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.HealthAndSafety
+import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -29,6 +31,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,19 +42,80 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.ui.theme.EmeraldPrimary
+import com.example.ui.theme.EmeraldSecondary
+
+/**
+ * Data structure for certified AdMob health & wellness simulated ads.
+ * Strictly adheres to Google Play & Google AdMob Restricted Products Policies:
+ * - NO promotion of recreational drugs, paraphernalia (bongs, pipes, vapes).
+ * - NO sale of controlled substances or cannabinoids.
+ * - Strictly approved health categories: Telemedicine, General Medical Monitors, HEPA Air Quality, Agronomy Sensors.
+ */
+data class CompliantAdCampaign(
+    val title: String,
+    val description: String,
+    val categoryLabel: String,
+    val ctaText: String = "Conocer Más"
+)
+
+object CompliantAdInventory {
+    val BANNERS = listOf(
+        CompliantAdCampaign(
+            title = "Telemedicina & Consultas Médicas Online",
+            description = "Atención con médicos especialistas acreditados para seguimiento de tratamientos.",
+            categoryLabel = "Salud Acreditada"
+        ),
+        CompliantAdCampaign(
+            title = "Monitores de Signos Vitales Grado Clínico",
+            description = "Tensiómetros y pulsioxímetros digitales certificados para control domiciliario.",
+            categoryLabel = "Dispositivos Médicos"
+        ),
+        CompliantAdCampaign(
+            title = "Organizadores de Medicación con Recordatorio",
+            description = "Dispensadores horarios inteligentes para máxima adherencia terapéutica.",
+            categoryLabel = "Gestión de Salud"
+        ),
+        CompliantAdCampaign(
+            title = "Purificadores de Aire con Filtro HEPA Médico",
+            description = "Filtración de alérgenos y partículas para mejorar la salud respiratoria interior.",
+            categoryLabel = "Higiene Ambiental"
+        ),
+        CompliantAdCampaign(
+            title = "Sensores de Humedad y pH para Botánica Doméstica",
+            description = "Monitoreo agronómico IoT de precisión para horticultura y cultivo orgánico.",
+            categoryLabel = "Agrotecnología"
+        )
+    )
+
+    val INTERSTITIAL = CompliantAdCampaign(
+        title = "Red de Teleasistencia Médica Especializada",
+        description = "Plataforma de orientación médica a distancia con profesionales habilitados por el Ministerio de Salud.",
+        categoryLabel = "Atención Clínica Certificada"
+    )
+}
 
 /**
  * Simulated AdMob Banner Component
+ * Strictly complies with Google AdMob & Google Play Policies.
  * Hidden immediately if isPremium is true.
  */
 @Composable
 fun SimulatedAdMobBanner(
     isPremium: Boolean,
     modifier: Modifier = Modifier,
-    adTopic: String = "Vaporizadores Médicos & Sustratos Orgánicos",
+    adTopic: String? = null,
     onUpgradeClick: () -> Unit = {}
 ) {
     if (isPremium) return
+
+    val ad = remember(adTopic) {
+        if (adTopic != null) {
+            CompliantAdInventory.BANNERS.find { it.title.contains(adTopic, ignoreCase = true) }
+                ?: CompliantAdInventory.BANNERS.first()
+        } else {
+            CompliantAdInventory.BANNERS.random()
+        }
+    }
 
     Card(
         modifier = modifier
@@ -85,7 +149,7 @@ fun SimulatedAdMobBanner(
                         )
                     }
                     Text(
-                        text = "Patrocinado por Google AdMob",
+                        text = "Anuncio AdMob • ${ad.categoryLabel}",
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = 10.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -126,13 +190,14 @@ fun SimulatedAdMobBanner(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = adTopic,
+                        text = ad.title,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
                     )
                     Text(
-                        text = "Equipamiento certificado, boquillas cerámicas y control térmico grado médico.",
+                        text = ad.description,
                         style = MaterialTheme.typography.bodySmall,
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -147,7 +212,7 @@ fun SimulatedAdMobBanner(
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "Ver",
+                        text = ad.ctaText,
                         color = MaterialTheme.colorScheme.onPrimary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
@@ -162,6 +227,7 @@ fun SimulatedAdMobBanner(
  * Simulated AdMob Interstitial Dialog
  * Shown after actions like saving a dose, cartridge, or strain.
  * Automatically bypassed if isPremium is true.
+ * NEVER shown on medical prescriptions or emergency screens.
  */
 @Composable
 fun SimulatedAdMobInterstitialDialog(
@@ -174,6 +240,8 @@ fun SimulatedAdMobInterstitialDialog(
         onDismiss()
         return
     }
+
+    val ad = CompliantAdInventory.INTERSTITIAL
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -202,6 +270,12 @@ fun SimulatedAdMobInterstitialDialog(
                         ) {
                             Text("AdMob Interstitial", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                         }
+                        Text(
+                            text = "Publicidad Médica Certificada",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
                         Icon(Icons.Default.Close, contentDescription = "Cerrar Anuncio")
@@ -216,18 +290,40 @@ fun SimulatedAdMobInterstitialDialog(
                 )
 
                 Card(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(EmeraldPrimary.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.HealthAndSafety, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(18.dp))
+                            }
+                            Column {
+                                Text(
+                                    text = ad.title,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Text(
+                                    text = ad.categoryLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = EmeraldSecondary,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
                         Text(
-                            text = "BioNutrientes & Terpenos Premium",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            text = "Fertilización 100% vegana y orgánica para cultivo terapéutico personal. Sin pesticidas ni metales pesados.",
+                            text = ad.description,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

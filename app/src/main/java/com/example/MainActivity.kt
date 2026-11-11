@@ -17,6 +17,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Surface
 import androidx.compose.material.icons.Icons
+import android.app.Activity
+import android.widget.Toast
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.Checkbox
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Book
@@ -402,6 +407,7 @@ fun CannaMedMainApp(
     val securityPrefs = remember { SecurityPreferences(context) }
     var isPremium by remember { mutableStateOf(securityPrefs.isPremium) }
     var showInterstitialAfterDose by remember { mutableStateOf(false) }
+    var isAgeVerified by remember { mutableStateOf(securityPrefs.isAgeVerified18Plus) }
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var showDoseWizard by remember { mutableStateOf(false) }
@@ -564,14 +570,25 @@ fun CannaMedMainApp(
                     .padding(innerPadding)
             ) {
                 when (selectedTab) {
-                    // TAB 0: PAGINA PRINCIPAL (SOLO TOMA DE DOSIS CON BOTON GRANDE + CONTADOR RETROCESO)
+                    // TAB 0: PAGINA PRINCIPAL (SEGUIMIENTO DE CONSUMO DIARIO, ACCESOS RÁPIDOS Y BIBLIOTECA)
                     0 -> HomeScreen(
                         latestLog = dosageLogs.firstOrNull(),
                         activeCartridge = activeCartridges.firstOrNull(),
                         quickStats = quickStats,
                         dailyGramsProgress = dailyGramsProgress,
                         onStartDoseWizard = { showDoseWizard = true },
-                        onOpenEmergencyRecorder = { showEmergencyRecorder = true }
+                        onOpenEmergencyRecorder = { showEmergencyRecorder = true },
+                        allLogs = dosageLogs,
+                        activeCartridges = activeCartridges,
+                        strains = strains,
+                        onQuickLogDose = { log ->
+                            viewModel.saveDosageLog(log)
+                            isPremium = securityPrefs.isPremium
+                            if (!isPremium) {
+                                showInterstitialAfterDose = true
+                            }
+                        },
+                        onNavigateToTab = { selectedTab = it }
                     )
 
                     // TAB 1: DIARIO DE TOMAS (SIN BOTON DUPLICADO, METRICA DE GRAMOS RESTANTES)
@@ -668,7 +685,16 @@ fun CannaMedMainApp(
 
                     // TAB 6: CONTROL DE VERSIÓN, CRÉDITOS, SUSCRIPCIÓN PREMIUM Y NORMATIVAS DE SEGURIDAD
                     6 -> LegalDisclaimerScreen(
-                        onToggleScreenshotProtection = onToggleScreenshotProtection
+                        onToggleScreenshotProtection = onToggleScreenshotProtection,
+                        onClearAllData = {
+                            viewModel.clearAllUserData {
+                                Toast.makeText(
+                                    context,
+                                    "Todos los datos locales y sandbox han sido eliminados de forma segura.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
                     )
                 }
             }
@@ -696,4 +722,146 @@ fun CannaMedMainApp(
             onDismiss = { showInterstitialAfterDose = false }
         )
     }
+
+    if (!isAgeVerified) {
+        AgeAndPrescriptionGateDialog(
+            onConfirm = {
+                securityPrefs.isAgeVerified18Plus = true
+                securityPrefs.hasAcceptedMedicalTerms = true
+                isAgeVerified = true
+            },
+            onExit = {
+                (context as? Activity)?.finish()
+            }
+        )
+    }
+}
+
+@Composable
+fun AgeAndPrescriptionGateDialog(
+    onConfirm: () -> Unit,
+    onExit: () -> Unit
+) {
+    var termsChecked by remember { mutableStateOf(false) }
+    var prescriptionChecked by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { /* Modal bloqueante obligatorio para cumplimiento Google Play */ },
+        icon = {
+            Icon(
+                Icons.Default.VerifiedUser,
+                contentDescription = null,
+                tint = EmeraldPrimary,
+                modifier = Modifier.size(38.dp)
+            )
+        },
+        title = {
+            Text(
+                text = "Verificación de Edad y Uso Médico (18+)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "En estricto apego a las directrices de Google Play Store para Sustancias Controladas y la legislación de cannabis medicinal (Chile Ley N° 20.000 / Ley N° 20.584):",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Text(
+                            text = "• Herramienta exclusiva para registro personal de dosis y salud.",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "• NO vende, NO distribuye ni procesa pagos de cannabis.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "• Privacidad Zero-Knowledge: datos cifrados en sandbox local.",
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { termsChecked = !termsChecked }
+                        .padding(vertical = 4.dp)
+                ) {
+                    Checkbox(
+                        checked = termsChecked,
+                        onCheckedChange = { termsChecked = it },
+                        modifier = Modifier.testTag("age_gate_18_checkbox")
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Declaro bajo fe jurada ser mayor de 18 años.",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { prescriptionChecked = !prescriptionChecked }
+                        .padding(vertical = 4.dp)
+                ) {
+                    Checkbox(
+                        checked = prescriptionChecked,
+                        onCheckedChange = { prescriptionChecked = it },
+                        modifier = Modifier.testTag("age_gate_prescription_checkbox")
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Cuento con indicación o receta médica profesional.",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = termsChecked && prescriptionChecked,
+                colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                modifier = Modifier.testTag("age_gate_confirm_button")
+            ) {
+                Text("Confirmar e Ingresar", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onExit,
+                modifier = Modifier.testTag("age_gate_exit_button")
+            ) {
+                Text("Salir de la App")
+            }
+        }
+    )
 }

@@ -303,4 +303,26 @@ class CannaMedRepository(
         sb.appendLine("Datos confidenciales del paciente.")
         return sb.toString()
     }
+
+    /**
+     * Wipes all user medical data, complying with Google Play Data Safety
+     * Right to be Forgotten (GDPR Art. 17, Ley N° 19.628 Chile, HIPAA).
+     */
+    suspend fun clearAllUserData(): Unit = withContext(Dispatchers.IO) {
+        database.clearAllTables()
+        // Re-populate baseline default educational strains and legal extracts
+        database.strainDao().insertAll(com.example.data.local.InitialData.DEFAULT_STRAINS)
+        database.legalExtractDao().insertAll(com.example.data.local.InitialData.DEFAULT_LEGAL_EXTRACTS)
+        // Clean encrypted sandbox files (prescriptions, videos)
+        try {
+            val filesDir = context.filesDir
+            filesDir.listFiles()?.forEach { file ->
+                if (file.isDirectory) file.deleteRecursively() else file.delete()
+            }
+            val cacheDir = context.cacheDir
+            cacheDir.listFiles()?.forEach { file ->
+                if (file.isDirectory) file.deleteRecursively() else file.delete()
+            }
+        } catch (_: Exception) {}
+    }
 }
