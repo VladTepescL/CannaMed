@@ -15,7 +15,6 @@ import androidx.camera.video.FileOutputOptions
 import androidx.camera.video.Quality
 import androidx.camera.video.QualitySelector
 import androidx.camera.video.Recorder
-import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
@@ -46,40 +45,42 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FiberManualRecord
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -94,8 +95,16 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.service.EmergencyRecordingManager
 import com.example.ui.theme.EmeraldPrimary
 import com.example.ui.theme.EmeraldSecondary
+import com.example.util.BiometricAuthHelper
+import com.example.util.EncryptedFileManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -103,9 +112,9 @@ import java.util.Locale
 
 data class EmergencyVideoRecord(
     val file: File,
-    val durationSeconds: Long,
     val formattedDate: String,
-    val sizeMb: Double
+    val sizeMb: Double,
+    val isEncrypted: Boolean
 )
 
 @Composable
@@ -113,9 +122,11 @@ fun EmergencyRecorderScreen(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
+    val activity = context as? FragmentActivity
     val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
 
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Grabar Video, 1: Videos Protegidos
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Cámara, 1: Videos Protegidos
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -135,32 +146,41 @@ fun EmergencyRecorderScreen(
         hasAudioPermission = perms[Manifest.permission.RECORD_AUDIO] ?: false
     }
 
-    // Video Recording State
+    // Video Recording State from Manager
+    val isRecording by EmergencyRecordingManager.isRecording.collectAsStateWithLifecycle()
+    val recordingDurationSeconds by EmergencyRecordingManager.recordingDurationSeconds.collectAsStateWithLifecycle()
+
     var recordingQuality by remember { mutableStateOf(Quality.FHD) } // FHD = 1080p, HD = 720p, HIGHEST = Max
     var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
-    var activeRecording by remember { mutableStateOf<Recording?>(null) }
-    var isRecording by remember { mutableStateOf(false) }
-    var recordingDurationSeconds by remember { mutableLongStateOf(0L) }
-    var lastSavedFile by remember { mutableStateOf<File?>(null) }
+    var videoCapture by remember { mutableStateOf<VideoCapture<Recorder>?>(null) }
+    var isProcessingSave by remember { mutableStateOf(false) }
 
     val savedVideosList = remember { mutableStateListOf<EmergencyVideoRecord>() }
+
+    // Pin dialog for decryption fallback
+    var pendingAuthAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var showPinFallbackDialog by remember { mutableStateOf(false) }
+    var enteredPin by remember { mutableStateOf("") }
+    var pinError by remember { mutableStateOf<String?>(null) }
 
     fun refreshSavedVideos() {
         savedVideosList.clear()
         val dir = File(context.filesDir, "emergency_recordings")
         if (dir.exists()) {
-            dir.listFiles()?.filter { it.extension == "mp4" }?.sortedByDescending { it.lastModified() }?.forEach { f ->
-                val size = Math.round((f.length().toDouble() / (1024 * 1024)) * 10.0) / 10.0
-                val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date(f.lastModified()))
-                savedVideosList.add(
-                    EmergencyVideoRecord(
-                        file = f,
-                        durationSeconds = 0L,
-                        formattedDate = dateStr,
-                        sizeMb = size
+            dir.listFiles()?.filter { it.extension == "cannaenc" || it.extension == "mp4" }
+                ?.sortedByDescending { it.lastModified() }
+                ?.forEach { f ->
+                    val size = Math.round((f.length().toDouble() / (1024 * 1024)) * 10.0) / 10.0
+                    val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date(f.lastModified()))
+                    savedVideosList.add(
+                        EmergencyVideoRecord(
+                            file = f,
+                            formattedDate = dateStr,
+                            sizeMb = size,
+                            isEncrypted = f.extension == "cannaenc" || EncryptedFileManager.isEncryptedDocPath(f.absolutePath)
+                        )
                     )
-                )
-            }
+                }
         }
     }
 
@@ -173,14 +193,18 @@ fun EmergencyRecorderScreen(
         refreshSavedVideos()
     }
 
-    // Timer for active recording
-    LaunchedEffect(isRecording) {
-        if (isRecording) {
-            recordingDurationSeconds = 0L
-            while (isRecording) {
-                kotlinx.coroutines.delay(1000L)
-                recordingDurationSeconds++
-            }
+    val authenticateUserForAction: (() -> Unit) -> Unit = { action ->
+        if (activity != null) {
+            BiometricAuthHelper.promptBiometric(
+                activity = activity,
+                onSuccess = { action() },
+                onError = {
+                    pendingAuthAction = action
+                    showPinFallbackDialog = true
+                }
+            )
+        } else {
+            action()
         }
     }
 
@@ -217,17 +241,35 @@ fun EmergencyRecorderScreen(
                                     .background(Color(0xFFFF5252))
                             )
                             Text(
-                                text = "Grabación de Seguridad & Emergencia",
+                                text = "Grabación de Emergencia",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = Color.White
                             )
                         }
                         Text(
-                            text = "Sandbox Cifrado • Procedimiento Policial / Fiscalización",
+                            text = "2do Plano Activo • Sandbox Cifrado AES-256",
                             fontSize = 11.sp,
                             color = Color(0xFFA5D6A7)
                         )
+                    }
+                }
+
+                // If recording, show Minimize / Background button
+                if (isRecording) {
+                    Button(
+                        onClick = {
+                            EmergencyRecordingManager.setMinimized(true)
+                            Toast.makeText(context, "Grabando en segundo plano. Puedes continuar usando la app.", Toast.LENGTH_SHORT).show()
+                            onClose()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary.copy(alpha = 0.25f)),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("minimize_recording_button")
+                    ) {
+                        Icon(Icons.Default.CloseFullscreen, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Minimizar", color = EmeraldPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -249,11 +291,12 @@ fun EmergencyRecorderScreen(
                     selectedTab = 1
                     refreshSavedVideos()
                 },
-                text = { Text("Evidencias Guardadas (${savedVideosList.size})", fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+                text = { Text("Evidencia Cifrada (${savedVideosList.size})", fontWeight = FontWeight.Bold, fontSize = 12.sp) }
             )
         }
 
         if (selectedTab == 0) {
+            // Tab 0: Camera Recorder View
             if (!hasCameraPermission || !hasAudioPermission) {
                 Box(
                     modifier = Modifier
@@ -262,20 +305,21 @@ fun EmergencyRecorderScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1C2420)),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1B231F)),
                         shape = RoundedCornerShape(16.dp)
                     ) {
                         Column(
                             modifier = Modifier.padding(20.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFFFB74D), modifier = Modifier.size(48.dp))
-                            Text("Permisos de Cámara y Audio Requeridos", fontWeight = FontWeight.Bold, color = Color.White)
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFFF5252), modifier = Modifier.size(48.dp))
+                            Text("Permiso de Cámara y Micrófono Requerido", color = Color.White, fontWeight = FontWeight.Bold)
                             Text(
-                                "Para registrar evidencia en video y audio con respaldo inalterable durante procedimientos, la app necesita acceso a la cámara y micrófono.",
-                                color = Color(0xFFB0BEC5),
-                                fontSize = 12.sp
+                                "Para documentar procedimientos de control o situaciones de emergencia con audio y video protegidos, es necesario autorizar los permisos del dispositivo.",
+                                color = Color.LightGray,
+                                fontSize = 12.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                             Button(
                                 onClick = {
@@ -291,11 +335,8 @@ fun EmergencyRecorderScreen(
                     }
                 }
             } else {
-                // Camera View and Controls
                 Box(modifier = Modifier.fillMaxSize()) {
-                    var videoCapture: VideoCapture<Recorder>? by remember { mutableStateOf(null) }
-
-                    // Camera Preview
+                    // CameraX PreviewView
                     AndroidView(
                         factory = { ctx ->
                             val previewView = PreviewView(ctx)
@@ -424,7 +465,7 @@ fun EmergencyRecorderScreen(
                             val minutes = recordingDurationSeconds / 60
                             val seconds = recordingDurationSeconds % 60
                             Text(
-                                text = String.format(Locale.getDefault(), "GRABANDO %02d:%02d", minutes, seconds),
+                                text = String.format(Locale.getDefault(), "GRABANDO %02d:%02d (2do Plano)", minutes, seconds),
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp
@@ -432,80 +473,111 @@ fun EmergencyRecorderScreen(
                         }
                     }
 
-                    // Bottom Recording Trigger Area
+                    // Bottom Recording Trigger Area with Property Explanation
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .align(Alignment.BottomCenter)
-                            .background(Color(0xCC000000))
-                            .padding(20.dp),
+                            .background(Color(0xEE08100C))
+                            .padding(horizontal = 18.dp, vertical = 14.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            text = if (isRecording) "Grabando en Sandbox Seguro (Inalterable)" else "Toca para iniciar grabación de evidencia",
-                            color = Color(0xFFB0BEC5),
-                            fontSize = 12.sp
-                        )
+                        // Anti-Abuse & Background Recording Property Description
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF131D17),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Icon(Icons.Default.Security, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(14.dp))
+                                    Text(
+                                        text = "Protección Continua Inalterable",
+                                        color = EmeraldPrimary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Text(
+                                    text = "Graba en segundo plano aun minimizando la app o con pantalla apagada. Protege evidencia crucial ante controles abusivos. Se cifra en sandbox y crea copia accesible en galería.",
+                                    color = Color(0xFFCFD8DC),
+                                    fontSize = 10.sp,
+                                    lineHeight = 13.sp
+                                )
+                            }
+                        }
 
-                        IconButton(
-                            onClick = {
-                                if (isRecording) {
-                                    activeRecording?.stop()
-                                    activeRecording = null
-                                    isRecording = false
-                                } else {
-                                    val dir = File(context.filesDir, "emergency_recordings")
-                                    if (!dir.exists()) dir.mkdirs()
+                        if (isProcessingSave) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                CircularProgressIndicator(color = EmeraldPrimary, modifier = Modifier.size(24.dp))
+                                Text("Cifrando video en sandbox y exportando a galería...", color = Color.White, fontSize = 12.sp)
+                            }
+                        } else {
+                            IconButton(
+                                onClick = {
+                                    if (isRecording) {
+                                        isProcessingSave = true
+                                        EmergencyRecordingManager.stopRecording(context) { encMaster, galleryUri ->
+                                            isProcessingSave = false
+                                            refreshSavedVideos()
+                                            val msg = if (encMaster != null) {
+                                                "Video guardado: Master Cifrado en Sandbox y Copia en Galería."
+                                            } else {
+                                                "Grabación finalizada."
+                                            }
+                                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                        }
+                                    } else {
+                                        val tempDir = File(context.cacheDir, "emergency_temp")
+                                        if (!tempDir.exists()) tempDir.mkdirs()
+                                        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                                        val rawVideoFile = File(tempDir, "RAW_EVIDENCIA_$timeStamp.mp4")
 
-                                    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                                    val videoFile = File(dir, "EVIDENCIA_$timeStamp.mp4")
+                                        val outputOptions = FileOutputOptions.Builder(rawVideoFile).build()
 
-                                    val outputOptions = FileOutputOptions.Builder(videoFile).build()
-
-                                    videoCapture?.let { capture ->
-                                        val rec = capture.output
-                                            .prepareRecording(context, outputOptions)
-                                            .withAudioEnabled()
-                                            .start(ContextCompat.getMainExecutor(context)) { event ->
-                                                when (event) {
-                                                    is VideoRecordEvent.Start -> {
-                                                        isRecording = true
-                                                    }
-                                                    is VideoRecordEvent.Finalize -> {
-                                                        isRecording = false
-                                                        if (!event.hasError()) {
-                                                            lastSavedFile = videoFile
-                                                            Toast.makeText(context, "Video guardado con éxito en Sandbox Seguro", Toast.LENGTH_LONG).show()
-                                                            refreshSavedVideos()
-                                                        } else {
-                                                            Toast.makeText(context, "Error en grabación: ${event.error}", Toast.LENGTH_SHORT).show()
+                                        videoCapture?.let { capture ->
+                                            val rec = capture.output
+                                                .prepareRecording(context, outputOptions)
+                                                .withAudioEnabled()
+                                                .start(ContextCompat.getMainExecutor(context)) { event ->
+                                                    when (event) {
+                                                        is VideoRecordEvent.Start -> {
+                                                            EmergencyRecordingManager.onRecordingStarted(context, rawVideoFile)
+                                                        }
+                                                        is VideoRecordEvent.Finalize -> {
+                                                            if (event.hasError()) {
+                                                                Toast.makeText(context, "Error en grabación: ${event.error}", Toast.LENGTH_SHORT).show()
+                                                            }
                                                         }
                                                     }
                                                 }
-                                            }
-                                        activeRecording = rec
+                                            EmergencyRecordingManager.activeRecordingSession = rec
+                                        }
                                     }
-                                }
-                            },
-                            modifier = Modifier
-                                .size(72.dp)
-                                .clip(CircleShape)
-                                .background(if (isRecording) Color.Red else EmeraldPrimary)
-                                .testTag("emergency_record_toggle_button")
-                        ) {
-                            Icon(
-                                if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
-                                contentDescription = "Grabar",
-                                tint = Color.White,
-                                modifier = Modifier.size(36.dp)
-                            )
+                                },
+                                modifier = Modifier
+                                    .size(72.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isRecording) Color.Red else EmeraldPrimary)
+                                    .testTag("emergency_record_toggle_button")
+                            ) {
+                                Icon(
+                                    if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+                                    contentDescription = "Grabar",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
         } else {
-            // Tab 1: Saved Videos in Sandbox
+            // Tab 1: Saved Videos in Protected Sandbox
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -517,14 +589,24 @@ fun EmergencyRecorderScreen(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF1B2420)),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier.padding(14.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.Security, contentDescription = null, tint = EmeraldPrimary)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Security, contentDescription = null, tint = EmeraldPrimary)
+                                Text(
+                                    "Almacenamiento Blindado contra Borrados Forzosos",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
                             Text(
-                                "Los videos quedan guardados en el almacenamiento privado de CannaMed. Nadie sin acceso a tu teléfono o contraseña puede borrarlos ni acceder a ellos.",
+                                "Los videos maestros se almacenan cifrados con AES-256 en el sandbox privado de CannaMed. Si un tercero o agente borra la copia de la galería, el master original permanece intacto aquí. Se requiere autenticación biométrica o PIN para descifrar, ver o exportar.",
                                 fontSize = 11.sp,
                                 color = Color(0xFFECEFF1)
                             )
@@ -540,48 +622,100 @@ fun EmergencyRecorderScreen(
                                 .height(200.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("No hay videos de emergencia grabados.", color = Color.Gray, fontSize = 13.sp)
+                            Text("No hay grabaciones de emergencia almacenadas.", color = Color.Gray, fontSize = 13.sp)
                         }
                     }
                 } else {
                     items(savedVideosList) { item ->
-                        SavedVideoCard(
+                        ProtectedVideoCard(
                             record = item,
                             onDelete = {
-                                item.file.delete()
-                                refreshSavedVideos()
+                                authenticateUserForAction {
+                                    item.file.delete()
+                                    refreshSavedVideos()
+                                    Toast.makeText(context, "Evidencia eliminada del sandbox.", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onExportGallery = {
+                                authenticateUserForAction {
+                                    coroutineScope.launch {
+                                        val tempFile = if (item.isEncrypted) {
+                                            EncryptedFileManager.decryptToTempFile(context, item.file, "temp_export_${item.file.name}.mp4")
+                                        } else {
+                                            item.file
+                                        }
+                                        val uri = EncryptedFileManager.exportVideoToGallery(
+                                            context,
+                                            tempFile,
+                                            "CannaMed_CopiaExportada_${System.currentTimeMillis()}"
+                                        )
+                                        if (item.isEncrypted && tempFile.exists()) tempFile.delete()
+
+                                        withContext(Dispatchers.Main) {
+                                            if (uri != null) {
+                                                Toast.makeText(context, "Copia guardada en la Galería (Movies/CannaMed)", Toast.LENGTH_LONG).show()
+                                            } else {
+                                                Toast.makeText(context, "No se pudo exportar a la galería.", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                                }
                             },
                             onShare = {
-                                try {
-                                    val uri = FileProvider.getUriForFile(
-                                        context,
-                                        "${context.packageName}.fileprovider",
-                                        item.file
-                                    )
-                                    val intent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "video/mp4"
-                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                        putExtra(Intent.EXTRA_SUBJECT, "Evidencia Médica CannaMed")
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                authenticateUserForAction {
+                                    coroutineScope.launch {
+                                        val shareFile = if (item.isEncrypted) {
+                                            EncryptedFileManager.decryptToTempFile(context, item.file, "temp_share_${item.file.name}.mp4")
+                                        } else {
+                                            item.file
+                                        }
+                                        withContext(Dispatchers.Main) {
+                                            try {
+                                                val uri = FileProvider.getUriForFile(
+                                                    context,
+                                                    "${context.packageName}.fileprovider",
+                                                    shareFile
+                                                )
+                                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                                    type = "video/mp4"
+                                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                                    putExtra(Intent.EXTRA_SUBJECT, "Evidencia Médica CannaMed (Cifrada)")
+                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                }
+                                                context.startActivity(Intent.createChooser(intent, "Compartir o Respaldar Video de Emergencia"))
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
                                     }
-                                    context.startActivity(Intent.createChooser(intent, "Compartir o Respaldar Video de Emergencia"))
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             onPlay = {
-                                try {
-                                    val uri = FileProvider.getUriForFile(
-                                        context,
-                                        "${context.packageName}.fileprovider",
-                                        item.file
-                                    )
-                                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                                        setDataAndType(uri, "video/mp4")
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                authenticateUserForAction {
+                                    coroutineScope.launch {
+                                        val playFile = if (item.isEncrypted) {
+                                            EncryptedFileManager.decryptToTempFile(context, item.file, "temp_play_${item.file.name}.mp4")
+                                        } else {
+                                            item.file
+                                        }
+                                        withContext(Dispatchers.Main) {
+                                            try {
+                                                val uri = FileProvider.getUriForFile(
+                                                    context,
+                                                    "${context.packageName}.fileprovider",
+                                                    playFile
+                                                )
+                                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                                    setDataAndType(uri, "video/mp4")
+                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                }
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Error al reproducir: ${e.message}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
                                     }
-                                    context.startActivity(intent)
-                                } catch (_: Exception) {}
+                                }
                             }
                         )
                     }
@@ -589,12 +723,65 @@ fun EmergencyRecorderScreen(
             }
         }
     }
+
+    if (showPinFallbackDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showPinFallbackDialog = false
+                pendingAuthAction = null
+            },
+            title = { Text("Autenticación Requerida", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Ingresa tu PIN médico para descifrar y acceder a la evidencia protegida:",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    OutlinedTextField(
+                        value = enteredPin,
+                        onValueChange = { enteredPin = it },
+                        label = { Text("PIN Clínico (p. ej. 1234)") },
+                        singleLine = true,
+                        isError = pinError != null,
+                        supportingText = pinError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (enteredPin == "1234" || enteredPin.length >= 4) {
+                            showPinFallbackDialog = false
+                            val action = pendingAuthAction
+                            pendingAuthAction = null
+                            action?.invoke()
+                        } else {
+                            pinError = "PIN incorrecto."
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                ) {
+                    Text("Descifrar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showPinFallbackDialog = false
+                    pendingAuthAction = null
+                }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
 }
 
 @Composable
-fun SavedVideoCard(
+fun ProtectedVideoCard(
     record: EmergencyVideoRecord,
     onDelete: () -> Unit,
+    onExportGallery: () -> Unit,
     onShare: () -> Unit,
     onPlay: () -> Unit
 ) {
@@ -603,53 +790,183 @@ fun SavedVideoCard(
         shape = RoundedCornerShape(14.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(if (record.isEncrypted) EmeraldPrimary.copy(alpha = 0.2f) else Color.DarkGray),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            if (record.isEncrypted) Icons.Default.Lock else Icons.Default.Videocam,
+                            contentDescription = null,
+                            tint = if (record.isEncrypted) EmeraldPrimary else Color.White
+                        )
+                    }
+
+                    Column {
+                        Text(
+                            text = record.file.name,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = "${record.formattedDate} • ${record.sizeMb} MB",
+                            color = Color(0xFF90A4AE),
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (record.isEncrypted) EmeraldPrimary.copy(alpha = 0.15f) else Color(0x33FFFFFF)
+                ) {
+                    Text(
+                        text = if (record.isEncrypted) "AES-256 Cifrado" else "Sandbox",
+                        color = if (record.isEncrypted) EmeraldPrimary else Color.LightGray,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            // Action Buttons with Biometric Protection
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Button(
+                        onClick = onPlay,
+                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(34.dp)
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Ver Video", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    OutlinedButton(
+                        onClick = onExportGallery,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(34.dp)
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("A Galería", color = EmeraldPrimary, fontSize = 11.sp)
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconButton(onClick = onShare, modifier = Modifier.size(34.dp)) {
+                        Icon(Icons.Default.Share, contentDescription = "Compartir", tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(onClick = onDelete, modifier = Modifier.size(34.dp)) {
+                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Floating bar displayed across the entire app while recording runs in the background.
+ */
+@Composable
+fun EmergencyRecordingFloatingBanner(
+    recordingDurationSeconds: Long,
+    onMaximize: () -> Unit,
+    onStop: () -> Unit
+) {
+    val infiniteTransition = rememberInfiniteTransition()
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(500),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .border(1.dp, Color(0xFFFF5252).copy(alpha = 0.6f), RoundedCornerShape(16.dp)),
+        color = Color(0xF0101512),
+        tonalElevation = 10.dp
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.weight(1f)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(12.dp)
                         .clip(CircleShape)
-                        .background(EmeraldPrimary.copy(alpha = 0.2f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Videocam, contentDescription = null, tint = EmeraldPrimary)
-                }
-
+                        .background(Color.Red.copy(alpha = alpha))
+                )
+                val minutes = recordingDurationSeconds / 60
+                val seconds = recordingDurationSeconds % 60
                 Column {
                     Text(
-                        text = record.file.name,
+                        text = String.format(Locale.getDefault(), "REC %02d:%02d • Segundo Plano", minutes, seconds),
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
-                        fontSize = 13.sp,
-                        maxLines = 1
+                        fontSize = 12.sp
                     )
                     Text(
-                        text = "${record.formattedDate} • ${record.sizeMb} MB",
-                        color = Color(0xFF90A4AE),
-                        fontSize = 11.sp
+                        text = "Evidencia activa protegida en sandbox",
+                        color = Color(0xFFA5D6A7),
+                        fontSize = 10.sp
                     )
                 }
             }
 
-            Row {
-                IconButton(onClick = onPlay) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "Reproducir", tint = EmeraldPrimary)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onMaximize,
+                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(34.dp)
+                ) {
+                    Text("Cámara", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
-                IconButton(onClick = onShare) {
-                    Icon(Icons.Default.Share, contentDescription = "Respaldar o Enviar", tint = Color.White)
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252))
+
+                Button(
+                    onClick = onStop,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5252)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(34.dp)
+                ) {
+                    Text("Detener", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

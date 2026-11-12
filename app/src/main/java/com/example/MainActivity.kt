@@ -22,6 +22,7 @@ import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.Checkbox
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Book
@@ -92,6 +93,10 @@ import com.example.ui.screens.StrainsLiteratureScreen
 import com.example.ui.theme.CannaMedTheme
 import com.example.ui.theme.EmeraldPrimary
 import com.example.ui.theme.EmeraldSecondary
+import com.example.ui.theme.EmeraldTertiary
+import com.example.service.EmergencyRecordingManager
+import com.example.ui.screens.EmergencyRecordingFloatingBanner
+import com.example.ui.screens.PatientIdentityCredentialModal
 
 import android.view.WindowManager
 import androidx.compose.foundation.layout.Spacer
@@ -407,7 +412,8 @@ fun CannaMedMainApp(
     val securityPrefs = remember { SecurityPreferences(context) }
     var isPremium by remember { mutableStateOf(securityPrefs.isPremium) }
     var showInterstitialAfterDose by remember { mutableStateOf(false) }
-    var isAgeVerified by remember { mutableStateOf(securityPrefs.isAgeVerified18Plus) }
+    var isAgeVerified by remember { mutableStateOf(securityPrefs.isAgeVerified21Plus) }
+    var showPatientCredentialDialog by remember { mutableStateOf(false) }
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var showDoseWizard by remember { mutableStateOf(false) }
@@ -513,6 +519,16 @@ fun CannaMedMainApp(
                             )
                         }
                         IconButton(
+                            onClick = { showPatientCredentialDialog = true },
+                            modifier = Modifier.testTag("top_app_bar_credential_button")
+                        ) {
+                            Icon(
+                                Icons.Default.Badge,
+                                contentDescription = "Credencial de Paciente (Control Policial)",
+                                tint = EmeraldTertiary
+                            )
+                        }
+                        IconButton(
                             onClick = { showBackupDialog = true },
                             modifier = Modifier.testTag("top_app_bar_backup_button")
                         ) {
@@ -564,11 +580,39 @@ fun CannaMedMainApp(
                 }
             }
         ) { innerPadding ->
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
+                val isBgRecording by EmergencyRecordingManager.isRecording.collectAsStateWithLifecycle()
+                val isMinimized by EmergencyRecordingManager.isMinimized.collectAsStateWithLifecycle()
+                val bgDuration by EmergencyRecordingManager.recordingDurationSeconds.collectAsStateWithLifecycle()
+
+                if (isBgRecording && isMinimized) {
+                    EmergencyRecordingFloatingBanner(
+                        recordingDurationSeconds = bgDuration,
+                        onMaximize = {
+                            EmergencyRecordingManager.setMinimized(false)
+                            showEmergencyRecorder = true
+                        },
+                        onStop = {
+                            EmergencyRecordingManager.stopRecording(context) { _, _ ->
+                                Toast.makeText(
+                                    context,
+                                    "Grabación finalizada: master cifrado en sandbox y copia en galería.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
                 when (selectedTab) {
                     // TAB 0: PAGINA PRINCIPAL (SEGUIMIENTO DE CONSUMO DIARIO, ACCESOS RÁPIDOS Y BIBLIOTECA)
                     0 -> HomeScreen(
@@ -700,6 +744,7 @@ fun CannaMedMainApp(
             }
         }
     }
+    }
 
     if (showEmergencyRecorder) {
         EmergencyRecorderScreen(
@@ -726,13 +771,25 @@ fun CannaMedMainApp(
     if (!isAgeVerified) {
         AgeAndPrescriptionGateDialog(
             onConfirm = {
-                securityPrefs.isAgeVerified18Plus = true
+                securityPrefs.isAgeVerified21Plus = true
                 securityPrefs.hasAcceptedMedicalTerms = true
                 isAgeVerified = true
+            },
+            onAttachIdentityDocs = {
+                securityPrefs.isAgeVerified21Plus = true
+                securityPrefs.hasAcceptedMedicalTerms = true
+                isAgeVerified = true
+                showPatientCredentialDialog = true
             },
             onExit = {
                 (context as? Activity)?.finish()
             }
+        )
+    }
+
+    if (showPatientCredentialDialog) {
+        PatientIdentityCredentialModal(
+            onDismiss = { showPatientCredentialDialog = false }
         )
     }
 }
@@ -740,13 +797,14 @@ fun CannaMedMainApp(
 @Composable
 fun AgeAndPrescriptionGateDialog(
     onConfirm: () -> Unit,
+    onAttachIdentityDocs: () -> Unit,
     onExit: () -> Unit
 ) {
     var termsChecked by remember { mutableStateOf(false) }
     var prescriptionChecked by remember { mutableStateOf(false) }
 
     AlertDialog(
-        onDismissRequest = { /* Modal bloqueante obligatorio para cumplimiento Google Play */ },
+        onDismissRequest = { /* Modal bloqueante obligatorio para cumplimiento normativo */ },
         icon = {
             Icon(
                 Icons.Default.VerifiedUser,
@@ -757,7 +815,7 @@ fun AgeAndPrescriptionGateDialog(
         },
         title = {
             Text(
-                text = "Verificación de Edad y Uso Médico (18+)",
+                text = "Verificación de Mayoría de Edad (21+) y Uso Médico",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -769,7 +827,7 @@ fun AgeAndPrescriptionGateDialog(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "En estricto apego a las directrices de Google Play Store para Sustancias Controladas y la legislación de cannabis medicinal (Chile Ley N° 20.000 / Ley N° 20.584):",
+                    text = "En estricto apego a las directrices de salud y la legislación de cannabis medicinal para mayores de 21 años (Chile Ley N° 20.000 / Ley N° 20.584):",
                     style = MaterialTheme.typography.bodySmall,
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -785,9 +843,10 @@ fun AgeAndPrescriptionGateDialog(
                         verticalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         Text(
-                            text = "• Herramienta exclusiva para registro personal de dosis y salud.",
+                            text = "• Acceso restringido exclusivamente a adultos mayores de 21 años.",
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.Bold,
+                            color = EmeraldPrimary
                         )
                         Text(
                             text = "• NO vende, NO distribuye ni procesa pagos de cannabis.",
@@ -796,8 +855,9 @@ fun AgeAndPrescriptionGateDialog(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "• Privacidad Zero-Knowledge: datos cifrados en sandbox local.",
-                            fontSize = 11.sp
+                            text = "• Respaldo de Identidad (Cédula + Selfie con carnet): Puedes adjuntar tus fotos para acreditación rápida ante revisiones policiales. Quedan cifradas localmente con AES-256 (Zero-Knowledge, no informar).",
+                            fontSize = 10.sp,
+                            lineHeight = 13.sp
                         )
                     }
                 }
@@ -813,11 +873,11 @@ fun AgeAndPrescriptionGateDialog(
                     Checkbox(
                         checked = termsChecked,
                         onCheckedChange = { termsChecked = it },
-                        modifier = Modifier.testTag("age_gate_18_checkbox")
+                        modifier = Modifier.testTag("age_gate_21_checkbox")
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Declaro bajo fe jurada ser mayor de 18 años.",
+                        text = "Declaro bajo fe jurada ser mayor de 21 años.",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -846,13 +906,32 @@ fun AgeAndPrescriptionGateDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = onConfirm,
-                enabled = termsChecked && prescriptionChecked,
-                colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                modifier = Modifier.testTag("age_gate_confirm_button")
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text("Confirmar e Ingresar", fontWeight = FontWeight.Bold)
+                Button(
+                    onClick = onAttachIdentityDocs,
+                    enabled = termsChecked && prescriptionChecked,
+                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("age_gate_confirm_and_attach_button")
+                ) {
+                    Icon(Icons.Default.Badge, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Ingresar y Acreditar Cédula / Selfie", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+
+                OutlinedButton(
+                    onClick = onConfirm,
+                    enabled = termsChecked && prescriptionChecked,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("age_gate_confirm_button")
+                ) {
+                    Text("Ingresar Directamente (21+)", fontSize = 12.sp)
+                }
             }
         },
         dismissButton = {

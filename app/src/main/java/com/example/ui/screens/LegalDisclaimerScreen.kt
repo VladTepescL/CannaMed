@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CameraAlt
@@ -89,11 +90,12 @@ fun LegalDisclaimerScreen(
     val secPrefs = remember { SecurityPreferences(context) }
     var biometricEnabled by remember { mutableStateOf(secPrefs.isBiometricLockEnabled) }
     var screenshotProtEnabled by remember { mutableStateOf(secPrefs.isScreenshotProtectionEnabled) }
-    var isAgeVerified by remember { mutableStateOf(secPrefs.isAgeVerified18Plus) }
+    var isAgeVerified by remember { mutableStateOf(secPrefs.isAgeVerified21Plus) }
     var isPremium by remember { mutableStateOf(secPrefs.isPremium) }
 
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
+    var showIdentityCredentialModal by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -308,35 +310,55 @@ fun LegalDisclaimerScreen(
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = EmeraldPrimary)
-                        Column {
-                            Text("Mayoría de Edad (18+) y Condición de Paciente", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                            Text("Confirmo ser mayor de 18 años y usar la app bajo supervisión médica facultativa.", style = MaterialTheme.typography.bodySmall, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = EmeraldPrimary)
+                            Column {
+                                Text("Mayoría de Edad Terapéutica (21+) y Condición de Paciente", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                Text("Acredito ser mayor de 21 años y usar la app bajo indicación o receta médica profesional.", style = MaterialTheme.typography.bodySmall, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
-                    }
-                    Switch(
-                        checked = isAgeVerified,
-                        onCheckedChange = {
-                            isAgeVerified = it
-                            secPrefs.isAgeVerified18Plus = it
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = EmeraldPrimary,
-                            checkedTrackColor = EmeraldPrimary.copy(alpha = 0.5f)
+                        Switch(
+                            checked = isAgeVerified,
+                            onCheckedChange = {
+                                isAgeVerified = it
+                                secPrefs.isAgeVerified21Plus = it
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = EmeraldPrimary,
+                                checkedTrackColor = EmeraldPrimary.copy(alpha = 0.5f)
+                            )
                         )
-                    )
+                    }
+
+                    OutlinedButton(
+                        onClick = { showIdentityCredentialModal = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.Badge, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (secPrefs.hasIdentityVerification) "Ver Credencial y Respaldo de Identidad (Cédula y Selfie)" else "Respaldar Cédula de Identidad y Selfie con Documento (21+)",
+                            color = EmeraldPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
@@ -840,6 +862,10 @@ fun LegalDisclaimerScreen(
     // In-App Complete Privacy Policy Dialog
     if (showPrivacyPolicyDialog) {
         PrivacyPolicyModal(onDismiss = { showPrivacyPolicyDialog = false })
+    }
+
+    if (showIdentityCredentialModal) {
+        PatientIdentityCredentialModal(onDismiss = { showIdentityCredentialModal = false })
     }
 }
 

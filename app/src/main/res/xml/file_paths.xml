@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <files-path name="medical_docs" path="medical_docs/" />
+    <files-path name="emergency_recordings" path="emergency_recordings/" />
+    <files-path name="patient_identity" path="patient_identity/" />
+    <files-path name="medical_encrypted_docs" path="medical_encrypted_docs/" />
     <cache-path name="shared_reports" path="shared_reports/" />
+    <cache-path name="temp_decrypted_docs" path="temp_decrypted_docs/" />
+    <cache-path name="temp_emergency_cache" path="temp_emergency_cache/" />
 </paths>
