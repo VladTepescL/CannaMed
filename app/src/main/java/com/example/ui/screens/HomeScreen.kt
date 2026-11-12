@@ -109,6 +109,8 @@ import com.example.ui.theme.EmeraldTertiary
 import com.example.ui.theme.StrainHybridColor
 import com.example.ui.theme.StrainIndicaColor
 import com.example.ui.theme.StrainSativaColor
+import com.example.ui.components.SimulatedAdMobBanner
+import com.example.util.SecurityPreferences
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -441,6 +443,7 @@ private fun TrackingViewContent(
     onStartDoseWizard: () -> Unit,
     onNavigateToTab: (Int) -> Unit
 ) {
+    val context = LocalContext.current
     val dateFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
 
     LazyColumn(
@@ -450,10 +453,149 @@ private fun TrackingViewContent(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
         }
 
-        // SECTION: RESUMEN DEL CONSUMO DIARIO (COUNTDOWN PROGRESS GAUGE)
+        // 1. PRIMERA OPCIÓN INMEDIATA: TOMA DE DOSIS (ACCESO PRINCIPAL)
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                shape = RoundedCornerShape(22.dp),
+                border = androidx.compose.foundation.BorderStroke(2.dp, EmeraldPrimary.copy(alpha = 0.5f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onStartDoseWizard() }
+                    .testTag("giant_dose_button")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(58.dp)
+                                .scale(pulseScale)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(EmeraldPrimary, Color(0xFF059669))
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.MedicalServices,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+
+                        Column {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = EmeraldPrimary.copy(alpha = 0.15f),
+                                modifier = Modifier.padding(bottom = 2.dp)
+                            ) {
+                                Text(
+                                    text = "OPCIÓN INMEDIATA",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = EmeraldPrimary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                            Text(
+                                text = "Toma de Dosis Terapéutica",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Toca para abrir el asistente guiado de toma (vaporización, gotas, extractos)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(EmeraldPrimary)
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        Text(
+                            text = "Tomar Dosis",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        // 2. ACCESOS RÁPIDOS DE DOSIFICACIÓN (1-TOQUE)
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Accesos Rápidos de Toma",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Registro inmediato en 1 toque con cálculo de gramos",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(EmeraldPrimary.copy(alpha = 0.15f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "1 Toque",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = EmeraldPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(quickPresets, key = { it.id }) { preset ->
+                        QuickPresetChipCard(
+                            preset = preset,
+                            onClick = { onPresetClick(preset) }
+                        )
+                    }
+                }
+            }
+        }
+
+        // 3. SECTION: RESUMEN DEL CONSUMO DIARIO (COUNTDOWN PROGRESS GAUGE)
         item {
             Card(
                 modifier = Modifier
@@ -568,7 +710,7 @@ private fun TrackingViewContent(
             }
         }
 
-        // 4 KPI CARDS: DOSES, PUFFS, AVERAGE RELIEF, FORMAT
+        // 4. 4 KPI CARDS: DOSES, PUFFS, AVERAGE RELIEF, FORMAT
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -609,130 +751,7 @@ private fun TrackingViewContent(
             }
         }
 
-        // SECTION: ACCESOS RÁPIDOS PARA REGISTRAR NUEVAS DOSIS
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "Accesos Rápidos de Dosificación",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Toca para registrar tomas frecuentes en 1 toque",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(EmeraldPrimary.copy(alpha = 0.15f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "Rápido",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = EmeraldPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
 
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(quickPresets, key = { it.id }) { preset ->
-                        QuickPresetChipCard(
-                            preset = preset,
-                            onClick = { onPresetClick(preset) }
-                        )
-                    }
-                }
-            }
-        }
-
-        // GIANT BUTTON: REGISTRO GUIADO COMPLETO
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                shape = RoundedCornerShape(22.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onStartDoseWizard() }
-                    .testTag("giant_dose_button")
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(58.dp)
-                                .scale(pulseScale)
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.linearGradient(
-                                        listOf(EmeraldPrimary, Color(0xFF059669))
-                                    )
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.MedicalServices,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-
-                        Column {
-                            Text(
-                                text = "Registro Guiado Completo",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Abre el asistente paso a paso con temperatura, cepa personalizada, fotos y notas clínicas.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 11.sp
-                            )
-                        }
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(EmeraldPrimary)
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            text = "Iniciar",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            }
-        }
 
         // LATEST INTAKE & ACTIVE POD STATUS
         item {
@@ -841,6 +860,12 @@ private fun TrackingViewContent(
             items(todayLogs.take(3), key = { it.id }) { log ->
                 TodayDoseRowCard(log = log, dateFormat = dateFormat)
             }
+        }
+
+        // Subtle simulated AdMob banner (hidden if isPremium)
+        item {
+            val secPrefs = remember { SecurityPreferences(context) }
+            SimulatedAdMobBanner(isPremium = secPrefs.isPremium)
         }
 
         item {
@@ -1273,6 +1298,12 @@ private fun LibraryViewContent(
             item {
                 PharmacopeiaEquivalenceCard()
             }
+        }
+
+        // Subtle simulated AdMob banner (hidden if isPremium)
+        item {
+            val secPrefs = remember { SecurityPreferences(context) }
+            SimulatedAdMobBanner(isPremium = secPrefs.isPremium)
         }
 
         item {

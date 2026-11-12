@@ -71,6 +71,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -412,6 +413,7 @@ fun CannaMedMainApp(
     val securityPrefs = remember { SecurityPreferences(context) }
     var isPremium by remember { mutableStateOf(securityPrefs.isPremium) }
     var showInterstitialAfterDose by remember { mutableStateOf(false) }
+    var dosesLoggedSessionCount by remember { mutableIntStateOf(0) }
     var isAgeVerified by remember { mutableStateOf(securityPrefs.isAgeVerified21Plus) }
     var showPatientCredentialDialog by remember { mutableStateOf(false) }
 
@@ -453,7 +455,11 @@ fun CannaMedMainApp(
                 showDoseWizard = false
                 isPremium = securityPrefs.isPremium
                 if (!isPremium) {
-                    showInterstitialAfterDose = true
+                    dosesLoggedSessionCount++
+                    // Frecuencia del 50%: 1 de cada 2 tomas de dosis muestra anuncio
+                    if (dosesLoggedSessionCount % 2 == 0) {
+                        showInterstitialAfterDose = true
+                    }
                 }
             }
         )
@@ -554,16 +560,22 @@ fun CannaMedMainApp(
                         NavigationBarItem(
                             selected = isSelected,
                             onClick = { selectedTab = index },
+                            alwaysShowLabel = true,
                             icon = {
                                 Icon(
                                     item.icon,
                                     contentDescription = item.title,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             },
                             label = {
                                 Text(
                                     text = item.title,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Clip,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                 )
                             },
@@ -629,7 +641,11 @@ fun CannaMedMainApp(
                             viewModel.saveDosageLog(log)
                             isPremium = securityPrefs.isPremium
                             if (!isPremium) {
-                                showInterstitialAfterDose = true
+                                dosesLoggedSessionCount++
+                                // Frecuencia del 50%: 1 de cada 2 tomas de dosis muestra anuncio
+                                if (dosesLoggedSessionCount % 2 == 0) {
+                                    showInterstitialAfterDose = true
+                                }
                             }
                         },
                         onNavigateToTab = { selectedTab = it }

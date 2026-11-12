@@ -453,6 +453,46 @@ fun StrainsLiteratureScreen(
         }
 
         item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, EmeraldPrimary.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Science, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(20.dp))
+                        Text(
+                            text = "Marco Regulatorio Internacional y Salud Pública",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Text(
+                        text = "• Información Botánica No Comercial: La literatura y los perfiles fitoquímicos de terpenos y cannabinoides provienen de fuentes científicas abiertas y monografías botánicas referenciales (Leafly / PubMed / NIH) con exclusivo fin orientativo.",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "• Prohibición Absoluta de Venta: CannaMed no facilita, no promueve ni enlaza a dispensarios, tiendas virtuales, carritos de compraventa ni delivery de sustancias controladas, cumpliendo rigurosamente la Ley N° 20.000 (Chile), las directrices de la OMS (ECDD) y las políticas de Google Play Store.",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        item {
             Spacer(modifier = Modifier.height(80.dp))
         }
     }

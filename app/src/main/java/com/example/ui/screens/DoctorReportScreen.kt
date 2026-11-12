@@ -76,10 +76,13 @@ import com.example.data.model.Cartridge
 import com.example.data.model.DosageLog
 import com.example.data.model.Prescription
 import com.example.ui.components.D3DosageEvolutionChart
+import com.example.ui.components.SimulatedAdMobBanner
+import com.example.ui.components.SimulatedAdMobInterstitialDialog
 import com.example.ui.theme.EmeraldPrimary
 import com.example.ui.theme.EmeraldSecondary
 import com.example.ui.theme.EmeraldSecondaryContainer
 import com.example.ui.theme.EmeraldTertiary
+import com.example.util.SecurityPreferences
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -102,6 +105,8 @@ fun DoctorReportScreen(
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+    val secPrefs = remember { SecurityPreferences(context) }
+    var showInterstitialAfterExport by remember { mutableStateOf(false) }
 
     var selectedTier by remember { mutableStateOf(ReportDetailTier.COMPLETE) }
     var patientName by remember { mutableStateOf("Paciente") }
@@ -202,6 +207,11 @@ fun DoctorReportScreen(
                     Icon(Icons.Default.Info, contentDescription = null, tint = EmeraldSecondary)
                 }
             }
+        }
+
+        // Subtle simulated AdMob banner (hidden if isPremium)
+        item {
+            SimulatedAdMobBanner(isPremium = secPrefs.isPremium)
         }
 
         // 1. Configurable Report Tier (Básico, Intermedio, Avanzado, Completo)
@@ -447,6 +457,9 @@ fun DoctorReportScreen(
                     ) {
                         Button(
                             onClick = {
+                                if (!secPrefs.isPremium) {
+                                    showInterstitialAfterExport = true
+                                }
                                 printOrSavePdf(
                                     context = context,
                                     reportContent = reportText,
@@ -466,6 +479,9 @@ fun DoctorReportScreen(
 
                         Button(
                             onClick = {
+                                if (!secPrefs.isPremium) {
+                                    showInterstitialAfterExport = true
+                                }
                                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
                                     putExtra(Intent.EXTRA_SUBJECT, "Informe Clínico Cannabis ($patientName) - Nivel ${selectedTier.label}")
@@ -485,6 +501,9 @@ fun DoctorReportScreen(
 
                     OutlinedButton(
                         onClick = {
+                            if (!secPrefs.isPremium) {
+                                showInterstitialAfterExport = true
+                            }
                             clipboardManager.setText(AnnotatedString(reportText))
                             Toast.makeText(context, "Informe copiado al portapapeles", Toast.LENGTH_SHORT).show()
                         },
@@ -530,6 +549,14 @@ fun DoctorReportScreen(
 
     if (showEquivalenceDialog) {
         EquivalenceScaleDialog(onDismiss = { showEquivalenceDialog = false })
+    }
+
+    if (showInterstitialAfterExport && !secPrefs.isPremium) {
+        SimulatedAdMobInterstitialDialog(
+            isPremium = secPrefs.isPremium,
+            actionContext = "Exportación de Informe Médico Finalizada",
+            onDismiss = { showInterstitialAfterExport = false }
+        )
     }
 }
 

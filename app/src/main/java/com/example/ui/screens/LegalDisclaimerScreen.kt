@@ -103,6 +103,83 @@ fun LegalDisclaimerScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Medical Emergency Protocol & Poison Control Contacts (PRIORITY 1 AT TOP)
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.5.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(16.dp))
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.error.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Phone, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                        }
+                        Column {
+                            Text(
+                                text = "Protocolo de Emergencia Médica y Toxicología",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Text(
+                                text = "Atención 24/7 en Caso de Reacción Adversa o Intoxicación",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Si presentas taquicardia severa, hipotensión aguda o reacción adversa imprevista, suspende el uso y comunícate de inmediato:",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        EmergencyCallButton(
+                            modifier = Modifier.weight(1f),
+                            label = "SAMU (Chile) 131",
+                            phone = "131",
+                            context = context
+                        )
+                        EmergencyCallButton(
+                            modifier = Modifier.weight(1f),
+                            label = "CITUC +56 2 2635 3800",
+                            phone = "+56226353800",
+                            context = context
+                        )
+                    }
+
+                    Text(
+                        text = "Centro de Información Toxicológica UC (CITUC) disponible 24 horas continuas para orientación clínica por sobredosis o intoxicación por sustancias.",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
         // App Version Header
         item {
             Card(
@@ -230,63 +307,6 @@ fun LegalDisclaimerScreen(
                     "En caso de experimentar reacciones adversas agudas, taquicardia severa, crisis de pánico o malestar imprevisto, suspende la administración de inmediato y acude al servicio de urgencias más cercano."
                 )
             )
-        }
-
-        // Medical Emergency Protocol & Poison Control Contacts
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(Icons.Default.Phone, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                        Text(
-                            text = "Protocolo de Emergencia Médica y Toxicología",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Text(
-                        text = "Si presentas taquicardia severa, hipotensión o reacción adversa imprevista:",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        EmergencyCallButton(
-                            modifier = Modifier.weight(1f),
-                            label = "SAMU (Chile) 131",
-                            phone = "131",
-                            context = context
-                        )
-                        EmergencyCallButton(
-                            modifier = Modifier.weight(1f),
-                            label = "CITUC +56 2 2635 3800",
-                            phone = "+56226353800",
-                            context = context
-                        )
-                    }
-
-                    Text(
-                        text = "Centro de Información Toxicológica UC (CITUC) disponible 24/7 para orientación por sobredosis o intoxicación por sustancias.",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
         }
 
         // Mandatory Legal Disclaimer (Law 20.000 Chile & International Framework)

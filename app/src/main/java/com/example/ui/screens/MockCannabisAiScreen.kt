@@ -72,7 +72,7 @@ fun MockCannabisAiScreen(
     val messages = remember {
         mutableStateListOf(
             ClinicalChatMessage(
-                text = "¡Hola! Soy tu Asesor Clínico Simulado de Cannabis Medicinal (Modo Offline). Puedo orientarte sobre dosificación, efecto séquito, temperaturas de vaporización, perfiles de terpenos y pautas de autocultivo orgánico terapéutico. ¿Qué deseas consultar hoy?",
+                text = "¡Hola! Soy tu Asesor Clínico Especializado en Cannabis Medicinal y Fitocannabinoides. Puedo orientarte sobre dosificación terapéutica, efecto séquito, temperaturas de vaporización médica, perfiles de terpenos y pautas de autocultivo orgánico. ¿Qué deseas consultar hoy?",
                 isUser = false
             )
         )
@@ -111,7 +111,7 @@ fun MockCannabisAiScreen(
         // Top Simulated AdMob Banner (Only if not premium)
         SimulatedAdMobBanner(
             isPremium = isPremium,
-            adTopic = "Semillas de Colección & Vaporizadores Clínicos",
+            adTopic = "Telemedicina & Consultas Médicas Online",
             onUpgradeClick = onUpgradeClick,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
         )
@@ -142,13 +142,13 @@ fun MockCannabisAiScreen(
                 }
                 Column {
                     Text(
-                        text = "Asesor Clínico Simulado (Modo Offline)",
+                        text = "Asesor Clínico Especializado",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Sin uso de API Key • 100% privado y local",
+                        text = "Orientación Farmacológica y Terapéutica",
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = 10.sp,
                         color = EmeraldSecondary

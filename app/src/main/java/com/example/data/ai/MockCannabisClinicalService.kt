@@ -109,7 +109,7 @@ object MockCannabisClinicalService {
         }
 
         return """
-🌿 **Asesor Clínico de Cannabis Medicinal (Modo Offline)**:
+🌿 **Asesor Clínico Especializado**:
 
 Has consultado sobre: *"${userQuery.take(40)}"*
 
